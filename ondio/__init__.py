@@ -7,7 +7,6 @@ call is dispatched to the matching backend. See PROJECT.md for the full design.
 from ondio.dispatcher import (
     delete,
     download,
-    #download_files,
     download_flac,
     download_json,
     exists,
@@ -17,8 +16,8 @@ from ondio.dispatcher import (
     read,
     read_flac,
     upload,
-    upload_file,
-    upload_json,
+    write,
+    write_json,
 )
 from ondio.registry import detect_platform
 from ondio.types import (
@@ -49,6 +48,6 @@ __all__ = [
     "read",
     "read_flac",
     "upload",
-    "upload_file",
-    "upload_json",
+    "write",
+    "write_json",
 ]
