@@ -106,8 +106,8 @@ class HttpBackend:
 
     # --- infeasible over plain HTTP -------------------------------------
 
-    def upload(self, uri: str, data: bytes) -> None:
-        raise UnsupportedOperationError(f"upload is not supported over HTTP: {uri}")
+    def write(self, uri: str, data: bytes) -> None:
+        raise UnsupportedOperationError(f"write is not supported over HTTP: {uri}")
 
     def list_files(
         self,

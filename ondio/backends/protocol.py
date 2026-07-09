@@ -82,7 +82,7 @@ class StorageBackend(Protocol):
         """
         ...
 
-    def upload(self, uri: str, data: bytes) -> None:
+    def write(self, uri: str, data: bytes) -> None:
         """Write bytes to a URI.
 
         Args:

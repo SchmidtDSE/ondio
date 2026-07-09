@@ -79,7 +79,7 @@ class AwsBackend:
         with self._translate(uri):
             return self._client.head_object(Bucket=bucket, Key=key)["ContentLength"]
 
-    def upload(self, uri: str, data: bytes) -> None:
+    def write(self, uri: str, data: bytes) -> None:
         bucket, key = _split(uri)
         with self._translate(uri):
             self._client.put_object(Bucket=bucket, Key=key, Body=data)
