@@ -18,6 +18,8 @@ _SCHEME_TO_PLATFORM = {
 
 _BACKEND_FACTORIES = {
     "local": ("ondio.backends.local", "LocalBackend"),
+    "aws": ("ondio.backends.aws", "AwsBackend"),
+    "url": ("ondio.backends.http", "HttpBackend"),
 }
 
 def detect_platform(uri: str) -> str:
