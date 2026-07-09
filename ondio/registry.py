@@ -5,6 +5,7 @@ from __future__ import annotations
 from importlib import import_module
 from urllib.parse import urlparse
 
+from ondio.backends.gcs import GcsBackend
 from ondio.types import UnknownPlatformError
 from ondio.backends.protocol import StorageBackend
 
@@ -20,6 +21,7 @@ _BACKEND_FACTORIES = {
     "local": ("ondio.backends.local", "LocalBackend"),
     "aws": ("ondio.backends.aws", "AwsBackend"),
     "url": ("ondio.backends.http", "HttpBackend"),
+    "gcs": ("ondio.backends.gcs", "GcsBackend"), 
 }
 
 def detect_platform(uri: str) -> str:
