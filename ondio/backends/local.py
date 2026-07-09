@@ -8,6 +8,7 @@ import shutil
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from ondio.backends.protocol import _matches_filters
 from ondio.types import AuthError, ObjectNotFoundError
 
 def _to_path(uri: str) -> Path:
@@ -29,7 +30,8 @@ class LocalBackend:
         try:
             return _to_path(uri).read_bytes()
         except OSError as exc:
-            raise exc
+            raise _wrap_oserror(uri, exc)
+
 
     def read_range(self, uri: str, start_byte: int, end_byte: int | None) -> bytes:
         if start_byte < 0:
@@ -37,9 +39,6 @@ class LocalBackend:
         if end_byte is not None and end_byte < start_byte:
             raise ValueError(f"end_byte ({end_byte}) < start_byte {start_byte}")
 
-        file_size = self.size(uri) 
-        if start_byte >= file_size: 
-            raise ValueError(f"start_byte ({start_byte}) >= file size ({file_size})")
         try:
             with open(_to_path(uri), "rb") as f:
                 f.seek(start_byte)
@@ -47,7 +46,7 @@ class LocalBackend:
                     return f.read()
                 return f.read(end_byte - start_byte + 1)
         except OSError as exc:
-            raise exc
+            raise _wrap_oserror(uri, exc)
 
     def size(self, uri: str) -> int:
         path = _to_path(uri)
@@ -56,7 +55,7 @@ class LocalBackend:
                 raise ObjectNotFoundError(f"no such object: {uri}")
             return path.stat().st_size
         except OSError as exc:
-            raise exc
+            raise _wrap_oserror(uri, exc)
 
     def write(self, uri: str, data : bytes) -> None:
         path = _to_path(uri)
@@ -64,7 +63,7 @@ class LocalBackend:
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
         except OSError as exc:
-            raise exc
+            raise _wrap_oserror(uri, exc)
 
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
@@ -75,14 +74,24 @@ class LocalBackend:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest)
 
-
     def list_files(
-            self, uri_prefix: str, *, recursive: bool = True, max_items: int | None = None
+        self,
+        uri_prefix: str,
+        *,
+        recursive: bool = True,
+        max_items: int | None = None,
+        required_prefix: str | None = None,
+        required_ext: str | None = None,
     ) -> list[str]:
         as_file_uri = uri_prefix.startswith("file://")
-        matches = self._iter_matches(uri_prefix, recursive=recursive)
+        matches = (
+            p
+            for p in self._iter_matches(uri_prefix, recursive=recursive)
+            if _matches_filters(p.name, required_prefix, required_ext)
+        )
         results = sorted(p.as_uri() if as_file_uri else str(p) for p in matches)
         return results if max_items is None else results[:max_items]
+
 
     def object_count(
         self,
@@ -91,17 +100,11 @@ class LocalBackend:
         required_prefix: str | None = None,
         required_ext: str | None = None,
     ) -> int:
-        ext = None
-        if required_ext is not None:
-            ext = required_ext if required_ext.startswith(".") else f".{required_ext}"
-        count = 0
-        for path in self._iter_matches(uri_prefix, recursive=True):
-            if required_prefix is not None and not path.name.startswith(required_prefix):
-                continue
-            if ext is not None and not path.name.endswith(ext):
-                continue
-            count += 1
-        return count
+         return sum(
+            1
+            for path in self._iter_matches(uri_prefix, recursive=True)
+            if _matches_filters(path.name, required_prefix, required_ext)
+        )
 
     def exists(self, uri: str) -> bool:
         return _to_path(uri).is_file()
