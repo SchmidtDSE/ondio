@@ -9,6 +9,18 @@ from __future__ import annotations
 import os
 from typing import Protocol
 
+def _matches_filters(
+    name: str, required_prefix: str | None, required_ext: str | None
+) -> bool:
+    """Filename-level filter shared by `list_files`/`object_count` implementations."""
+    if required_prefix is not None and not name.startswith(required_prefix):
+        return False
+    if required_ext is not None:
+        ext = required_ext if required_ext.startswith(".") else f".{required_ext}"
+        if not name.endswith(ext):
+            return False
+    return True
+
 
 class StorageBackend(Protocol):
     """Byte-level storage primitives, implemented once per platform.
