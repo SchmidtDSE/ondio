@@ -25,11 +25,24 @@ What changed versus soundhub_utils:
   StorageBackend;
 * the four legacy entry points collapse to read_flac/download_flac, with the
   window optional and the fetch strategy overridable via use_range.
-* the byte-range path hardens the soundhub_utils estimate: it interpolates over 
+* the byte-range path hardens the soundhub_utils estimate: it interpolates over
   the audio-data region only (legacy measured from byte 0, so a short window
   near t=0 could land entirely inside a large metadata region and fail to
-  decode). It also enforces a minimum padding around the window, because 
+  decode). It also enforces a minimum padding around the window, because
   proportional padding on very short clips can fail.
+* ranged blobs are handed to ffmpeg behind a reconstructed header (fLaC
+  marker + the file's own STREAMINFO). Legacy passed the bare mid-stream
+  blob, forcing ffmpeg to blind-scan for a frame sync: every legacy ranged
+  read decoded slightly misaligned (measured 1-18 ms on clean files, worse on
+  variable-bitrate content), and 24-bit blobs could probe as video and crash.
+* a ranged fetch that fails to decode or comes back too short to cover the
+  window raises OndioError naming use_range=False as the exact fallback.
+  Legacy's only check was a log message with a 1-second tolerance:
+  undershoots — including windows the header places past the file's real
+  end — silently returned short or fabricated audio.
+* millisecond offsets are round()ed, not int()-truncated: float subtraction
+  artifacts (1.4 - 0.4 == 0.9999...) cost legacy a millisecond of audio on
+  many windows.
 
 Requirements: pydub + audioop-lts (Python >= 3.13 removed stdlib audioop) and
 the ffmpeg CLI on PATH — pydub shells out to it for all decoding/encoding.
@@ -38,12 +51,12 @@ Caveats inherited from the soundhub_utils design (kept for parity, documented he
 
 * slicing is at integer-millisecond granularity, not sample-exact;
 * the byte-range path estimates positions linearly from the header's
-  duration and hands ffmpeg a headerless mid-stream blob; ffmpeg starts
-  decoding at the first frame boundary it finds, so the window is aligned
-  to where the estimate landed, not to exact samples — and if STREAMINFO
-  lies about the duration (truncated recorder files exist), the returned audio
-  is silently from the wrong position. When in doubt, pass use_range=False and
-  pay for the full download.
+  duration and assumes the decoded audio begins at the padded start time;
+  alignment is therefore approximate, and if STREAMINFO lies about the
+  duration (truncated recorder files exist), a ranged read that does cover
+  the window can still return audio from the wrong position with no error —
+  only undershoots are caught and raised. When in doubt, pass use_range=False
+  and pay for the full download.
 """
 
 from __future__ import annotations
@@ -189,30 +202,25 @@ def _decode_flac(data: bytes):
     finally:
         os.unlink(path)
 
-
 def _estimate_byte_range(
     file_size: int,
     audio_data_offset: int,
     total_duration: float,
-    start_sec: float,
-    end_sec: float,
-    padding_ratio: float,
+    padded_start: float,
+    padded_end: float,
 ) -> tuple[int, int]:
-    """Linear seconds->bytes estimate, padded by `padding_ratio` of the window
-    duration on each side.
+    """Linear seconds->bytes estimate over the audio-data region.
 
     Interpolating from audio_data_offset (soundhub_utils measured from byte 0)
     keeps metadata out of the rate and guarantees no window can land inside
     the metadata region — recorder files carry seek tables large enough to
     swallow the whole estimated range for a short window near t=0.
     """
-    padding_sec = max(padding_ratio * (end_sec - start_sec), _RANGE_MIN_PAD_SEC)
-    padded_start = max(0.0, start_sec - padding_sec)
-    padded_end = min(total_duration, end_sec + padding_sec)
     bytes_per_second = (file_size - audio_data_offset) / total_duration
     start_byte = audio_data_offset + int(padded_start * bytes_per_second)
     end_byte = min(file_size - 1, audio_data_offset + int(padded_end * bytes_per_second))
     return start_byte, end_byte
+
 
 
 def _read_window(
@@ -258,18 +266,51 @@ def _read_window(
         )
 
     if use_range:
+        from pydub.exceptions import CouldntDecodeError  # audio extra, like pydub
+
+        # extract_flac_header validated that STREAMINFO is the first metadata
+        # block, so bytes 8-41 are its body. Prepend it (behind a fresh fLaC
+        # marker) to each fetched blob so ffmpeg gets a real header: on a bare
+        # mid-stream blob it blind-scans for a frame sync and can false-sync
+        # (silently misaligned audio), and ffprobe can misidentify 24-bit
+        # streams as video and crash.
+        streaminfo = bytes(backend.read_range(uri, 8, 41))
+        stream_header = _MARKER + bytes([0x80]) + (34).to_bytes(3, "big") + streaminfo
+
+        window = end_sec - start_sec
+        # round, don't truncate: float subtraction artifacts (1.4 - 0.4 ==
+        # 0.9999…) would otherwise shave a millisecond off the window
+        window_ms = round(window * 1000)
+        padding = max(window * padding_ratio, _RANGE_MIN_PAD_SEC)
+        padded_start = max(0.0, start_sec - padding)
+        padded_end = min(duration, end_sec + padding)
         start_byte, end_byte = _estimate_byte_range(
-            file_size, header.audio_data_offset, duration, start_sec, end_sec, padding_ratio
+            file_size, header.audio_data_offset, duration, padded_start, padded_end
         )
-        audio = _decode_flac(backend.read_range(uri, start_byte, end_byte))
-        # The decoded audio is assumed to begin at the padded start time; the
-        # window is cut relative to that. Estimate error shifts the window.
-        padded_start = max(0.0, start_sec - (end_sec - start_sec) * padding_ratio)
-        rel_ms = int((start_sec - padded_start) * 1000)
-        return audio[rel_ms:rel_ms + int((end_sec - start_sec) * 1000)]
+
+        error: Exception | None = None
+        audio = None
+        try:
+            audio = _decode_flac(stream_header + backend.read_range(uri, start_byte, end_byte))
+        except CouldntDecodeError as exc:
+            error = exc
+        # The decoded audio is assumed to begin at padded_start; the window is
+        # cut relative to that. An undershoot (decoded audio too short to
+        # cover the window) is raised, never returned short.
+        rel_ms = round((start_sec - padded_start) * 1000)
+        if audio is not None and len(audio) >= rel_ms + window_ms:
+            return audio[rel_ms:rel_ms + window_ms]
+        raise OndioError(
+            f"ranged read could not cover [{start_sec}, {end_sec}]s of {uri}:"
+            " the byte estimate positions the window using the header's"
+            " duration, which appears to be wrong for this file (truncated"
+            " recordings that overstate their length exist), or the fetched"
+            " bytes failed to decode. A full download reads the window"
+            " exactly: pass use_range=False."
+        ) from error
 
     audio = _decode_flac(backend.read(uri))
-    return audio[int(start_sec * 1000):int(end_sec * 1000)]
+    return audio[round(start_sec * 1000):round(end_sec * 1000)]
 
 
 def _segment_to_array(chunk) -> tuple[np.ndarray, int]:
