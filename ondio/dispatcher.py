@@ -43,7 +43,7 @@ def download(uri: str, out_path: str | os.PathLike[str], **kwargs: Any) -> None:
     get_backend(uri, **kwargs).download(uri, out_path)
 
 
-def upload(uri: str, data: bytes, **kwargs: Any) -> None:
+def write(uri: str, data: bytes, **kwargs: Any) -> None:
     """Write raw bytes to `uri`.
 
     Args:
@@ -51,10 +51,10 @@ def upload(uri: str, data: bytes, **kwargs: Any) -> None:
         data: The bytes to write.
         **kwargs: Forwarded to the backend constructor.
     """
-    get_backend(uri, **kwargs).upload(uri, data)
+    get_backend(uri, **kwargs).write(uri, data)
 
 
-def upload_json(uri: str, data: Any, **kwargs: Any) -> None:
+def write_json(uri: str, data: Any, **kwargs: Any) -> None:
     """Serialize `data` as JSON (UTF-8, `ensure_ascii=False`) and upload it to `uri`.
 
     Args:
@@ -62,7 +62,7 @@ def upload_json(uri: str, data: Any, **kwargs: Any) -> None:
         data: Any `json.dumps`-serializable value.
         **kwargs: Forwarded to the backend constructor.
     """
-    upload(uri, json.dumps(data, ensure_ascii=False).encode("utf-8"), **kwargs)
+    write(uri, json.dumps(data, ensure_ascii=False).encode("utf-8"), **kwargs)
 
 
 def download_json(uri: str, **kwargs: Any) -> Any:
@@ -78,7 +78,7 @@ def download_json(uri: str, **kwargs: Any) -> Any:
     return json.loads(read(uri, **kwargs))
 
 
-def upload_file(uri: str, source_path: str | os.PathLike[str], **kwargs: Any) -> None:
+def upload(uri: str, source_path: str | os.PathLike[str], **kwargs: Any) -> None:
     """Upload a local file to `uri`.
 
     Args:
@@ -86,7 +86,7 @@ def upload_file(uri: str, source_path: str | os.PathLike[str], **kwargs: Any) ->
         source_path: Local file to upload.
         **kwargs: Forwarded to the backend constructor.
     """
-    upload(uri, Path(source_path).read_bytes(), **kwargs)
+    write(uri, Path(source_path).read_bytes(), **kwargs)
 
 
 def list_files(
@@ -94,6 +94,8 @@ def list_files(
     *,
     recursive: bool = True,
     max_items: int | None = None,
+    required_prefix: str | None = None,
+    required_ext: str | None = None,
     **kwargs: Any,
 ) -> list[str]:
     """List full URIs under a prefix, lexicographically sorted.
@@ -102,16 +104,24 @@ def list_files(
         uri_prefix: Prefix to list under (a "directory" URI or a partial
             object name, S3-style).
         recursive: If False, list only the immediate level.
-        max_items: Cap on the number of results; None means unbounded.
+        max_items: Cap on the number of results, applied after the filename
+            filters; None means unbounded.
+        required_prefix: If given, list only objects whose *filename* starts
+            with this (applied to every recursively listed key).
+        required_ext: If given, list only objects with this file extension
+            (with or without the leading dot).
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
         Full URIs (never bare keys), sorted; empty if nothing matches.
     """
     return get_backend(uri_prefix, **kwargs).list_files(
-        uri_prefix, recursive=recursive, max_items=max_items
+        uri_prefix,
+        recursive=recursive,
+        max_items=max_items,
+        required_prefix=required_prefix,
+        required_ext=required_ext,
     )
-
 
 def object_count(
     uri_prefix: str,
