@@ -7,7 +7,11 @@ dependencies = [
     "audioop-lts; python_version >= '3.13'",
 ]
 name = "ondio"
+description = "Uniform IO of audio data and bioacoustic model results across S3, GCS, HTTP, and local filesystems"
 readme = "README.md"
+license = "BSD-3-Clause"
+license-files = ["LICENSE.md"]
+authors = [{ name = "Michael Catchen", email = "mdcatchen@gmail.com" }]
 requires-python = ">= 3.11"
 version = "0.1.0"
 
@@ -19,6 +23,10 @@ http = ["requests"]
 [build-system]
 build-backend = "hatchling.build"
 requires = ["hatchling"]
+
+# keep local tooling state (pixi lockfile, claude settings) out of the sdist
+[tool.hatch.build.targets.sdist]
+exclude = [".claude", "pixi.lock"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -42,6 +50,9 @@ cocina = { git = "https://github.com/SchmidtDSE/cocina", rev = "81ba904aa16a31eb
 [tool.pixi.environments]
 default = { features = ["audio", "http"] }
 test = { features = ["test", "audio"] }
+# no-default-feature: building an sdist/wheel needs neither ffmpeg nor an
+# editable install, and skipping them keeps the env minimal
+build = { features = ["build"], no-default-feature = true }
 
 # pydub shells out to the ffmpeg CLI; pip can't provide the binary, conda can.
 [tool.pixi.feature.audio.dependencies]
@@ -61,7 +72,21 @@ pyarrow = "*"
 [tool.pixi.feature.test.pypi-dependencies]
 soundfile = "*"
 
+# --no-isolation: use the conda-provided hatchling instead of letting
+# python-build pip-install a backend at build time, so the exclude-newer
+# pin above covers the build toolchain too
+[tool.pixi.feature.build.dependencies]
+python = "3.11.*"
+python-build = "*"
+hatchling = "*"
+twine = "*"
+
+[tool.pixi.feature.build.tasks]
+build = "rm -rf dist && python -m build --no-isolation"
+check-dist = "twine check dist/*"
+publish = { cmd = "twine upload dist/*", depends-on = ["build", "check-dist"] }
+
 [tool.pixi.feature.test.tasks]
 test = "pytest"
 test-unit = "pytest tests/unit -m 'not integration and not slow'"
-test-doctest = "pytest --doctest-modules ondio"
+test-doctest = "pytest --doctest-modules --import-mode=importlib ondio"
