@@ -47,6 +47,10 @@ summary = ondio.download_json("s3://my-bucket/results/summary.json")
 ondio.download("gs://my-bucket/audio/rec.flac", "data/rec.flac")
 ondio.upload("s3://my-bucket/audio/rec.flac", "data/rec.flac")
 
+# many objects into one directory, named by basename; concurrent downloads,
+# returned local paths follow the input order
+local = ondio.download_files(uris, "results/", max_workers=8)
+
 # listing and management — filename filters compose with max_items
 uris = ondio.list_files("s3://my-bucket/results/")
 flacs = ondio.list_files("s3://my-bucket/audio/", required_ext="flac")
@@ -170,6 +174,16 @@ on synthetic fixtures and on real field recordings.
   `AuthError`, ...) instead of only being logged: logging (via cocina's
   `Printer`, as in soundhub_utils) narrates progress and decisions, but is
   never the sole signal that something went wrong.
+- `download_files` raises `ValueError` upfront when two URIs share a basename
+  (they would overwrite each other in the destination directory); legacy
+  silently clobbered. It also downloads concurrently and dispatches each URI
+  independently, so schemes may be mixed in one call.
+- There is no per-call `printer=` argument (call kwargs are reserved for
+  backend configuration). Narration goes to cocina's process-wide `Printer`
+  singleton when cocina is installed, and is a silent no-op otherwise. To
+  route it to your own printer-like object instead (anything with
+  `.message`, `.error`, ...), call `ondio.set_printer(obj)` once at startup;
+  `ondio.set_printer(None)` restores the default.
 
 ### Ranged (windowed) FLAC reads
 
@@ -233,6 +247,7 @@ implement format-specific logic.
 | `write(uri, data)` | Write in-memory `bytes` to `uri` |
 | `write_json(uri, obj)` / `download_json(uri)` | JSON objects, serialized/parsed |
 | `download(uri, out_path)` | Download the object at `uri` to a local file |
+| `download_files(uris, local_dir)` | Download many objects into a directory, named by basename; returns local paths in input order |
 | `upload(uri, source_path)` | Upload a local file to `uri` |
 | `extract_flac_header(uri)` | Parse FLAC STREAMINFO, fetching only header bytes |
 | `read_flac(uri, start_sec, end_sec, decode=…)` | FLAC (whole or windowed) → PCM array or FLAC bytes |
@@ -254,7 +269,8 @@ Each call resolves a backend from the URI scheme and delegates to it:
 │ dispatcher — the public, URI-first API                          │
 │                                                                 │
 │   bytes/objects:  read · write · download · upload              │
-│                   exists · delete · list_files · object_count   │
+│                   download_files · exists · delete              │
+│                   list_files · object_count                     │
 │   json/parquet:   write_json · download_json · upload_parquet   │
 │   flac:           extract_flac_header · read_flac               │
 │                   download_flac                                 │
