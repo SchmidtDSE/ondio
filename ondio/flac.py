@@ -185,9 +185,10 @@ def _decode_flac(data: bytes):
     """Decode FLAC bytes to an AudioSegment via a temp file.
 
     A temp file rather than a pipe mirrors soundhub_utils: ffmpeg gets a
-    seekable input, which is more reliable across its demuxers. For range
-    downloads `data` has no fLaC header at all — ffmpeg scans for frame sync
-    and decodes from the first complete frame it finds.
+    seekable input, which is more reliable across its demuxers. Range
+    downloads arrive with a reconstructed header (fLaC marker + STREAMINFO)
+    already prepended; ffmpeg still scans past the header for the first
+    complete frame, since a mid-stream blob starts at an arbitrary byte.
     """
     AudioSegment = _require_pydub()
     with tempfile.NamedTemporaryFile(suffix=".flac", delete=False) as tmp:
