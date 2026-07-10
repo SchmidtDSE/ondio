@@ -32,6 +32,9 @@ logs/
 *.pyc
 pip-selfcheck.json
 man
+.hypothesis/
+__pycache__/
+.coverage
 
 
 #***************************************************************************
