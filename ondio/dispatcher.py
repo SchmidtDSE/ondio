@@ -10,8 +10,10 @@ from __future__ import annotations
 
 import json
 import os
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import Any, Literal, overload
+from typing import Any, Literal, Sequence, overload
+from urllib.parse import urlparse
 
 import numpy as np
 
@@ -43,6 +45,71 @@ def download(uri: str, out_path: str | os.PathLike[str], **kwargs: Any) -> None:
     """
     get_backend(uri, **kwargs).download(uri, out_path)
     printer.message(f"downloaded {uri} to {out_path}")
+
+
+def download_files(
+    uris: Sequence[str],
+    local_dir: str | os.PathLike[str],
+    *,
+    max_workers: int | None = None,
+    **kwargs: Any,
+) -> list[str]:
+    """Download each object in `uris` into `local_dir`, named by its basename.
+
+    Downloads run concurrently, and each URI dispatches independently, so
+    schemes may be mixed in one call. The returned paths always follow the
+    input order. The first failure cancels downloads not yet started and
+    re-raises; files that already finished are left in place.
+
+    (Counterpart of legacy soundhub_utils `io.download_files(uris, local_dir)`
+    — with one deliberate change: URIs whose basenames collide raise upfront
+    instead of silently overwriting each other in `local_dir`.)
+
+    Args:
+        uris: Fully-qualified storage URIs; schemes may be mixed.
+        local_dir: Local directory to download into, created if missing.
+            When `uris` is empty nothing happens and the directory is not
+            created.
+        max_workers: Thread-pool size for the concurrent downloads.
+        **kwargs: Forwarded to the backend constructor.
+
+    Returns:
+        Local paths of the downloaded files, in the order of `uris`.
+
+    Raises:
+        ValueError: Before anything is downloaded — if a URI has an empty
+            basename (a prefix-like URI), or if two URIs share a basename.
+    """
+    if not uris:
+        return []
+
+    jobs: list[tuple[str, Path]] = []
+    seen: dict[str, str] = {}
+    for uri in uris:
+        # Path.name would strip a trailing slash ("/prefix/" -> "prefix"), so
+        # treat those as prefix-like explicitly.
+        path_part = urlparse(uri).path
+        name = "" if path_part.endswith("/") else Path(path_part).name
+        if not name:
+            raise ValueError(f"cannot derive a filename from {uri!r}")
+        if name in seen:
+            raise ValueError(
+                f"duplicate basename {name!r}: {seen[name]!r} and {uri!r} "
+                f"would overwrite each other in {os.fspath(local_dir)!r}"
+            )
+        seen[name] = uri
+        jobs.append((uri, Path(local_dir) / name))
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [executor.submit(download, uri, path, **kwargs) for uri, path in jobs]
+        try:
+            for future in as_completed(futures):
+                future.result()
+        except BaseException:
+            executor.shutdown(wait=True, cancel_futures=True)
+            raise
+    printer.message(f"downloaded {len(jobs)} files to {os.fspath(local_dir)}")
+    return [str(path) for _, path in jobs]
 
 
 def write(uri: str, data: bytes, **kwargs: Any) -> None:
