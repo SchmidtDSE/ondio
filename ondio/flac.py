@@ -44,8 +44,9 @@ What changed versus soundhub_utils:
   artifacts (1.4 - 0.4 == 0.9999...) cost legacy a millisecond of audio on
   many windows.
 
-Requirements: pydub + audioop-lts (Python >= 3.13 removed stdlib audioop) and
-the ffmpeg CLI on PATH — pydub shells out to it for all decoding/encoding.
+Requirements: the ffmpeg CLI on PATH — pydub (a core dependency, with
+audioop-lts standing in for the stdlib audioop that Python 3.13 removed)
+shells out to it for all decoding/encoding.
 
 Caveats inherited from the soundhub_utils design (kept for parity, documented here):
 
@@ -65,14 +66,13 @@ import io
 import os
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, overload
+from typing import Literal, overload
+
+import numpy as np
 
 from ondio._log import printer
 from ondio.backends.protocol import StorageBackend
 from ondio.types import FlacHeader, OndioError
-
-if TYPE_CHECKING:
-    import numpy as np
 
 # Marker of the beginning of a FLAC stream: ASCII "fLaC".
 _MARKER = b"fLaC"
@@ -93,14 +93,9 @@ _RANGE_MIN_PAD_SEC = 0.5
 
 
 
+# Lazily load pydub, will check for ffmpeg install here
 def _require_pydub():
-    try:
-        from pydub import AudioSegment
-    except ImportError as exc:
-        raise ImportError(
-            "FLAC decoding requires the 'audio' extra (pydub + audioop-lts):"
-            " pip install ondio[audio] — and the ffmpeg CLI must be on PATH"
-        ) from exc
+    from pydub import AudioSegment
     return AudioSegment
 
 
@@ -276,7 +271,7 @@ def _read_window(
     )
 
     if use_range:
-        from pydub.exceptions import CouldntDecodeError  # audio extra, like pydub
+        from pydub.exceptions import CouldntDecodeError  # deferred, like pydub itself
 
         # extract_flac_header validated that STREAMINFO is the first metadata
         # block, so bytes 8-41 are its body. Prepend it (behind a fresh fLaC
@@ -335,7 +330,6 @@ def _segment_to_array(chunk) -> tuple[np.ndarray, int]:
     """(samples, sample_rate): float32 of shape (frames, channels), normalized
     to [-1, 1] the same way libsndfile/soundfile normalizes integer PCM.
     """
-    import numpy as np  # the 'audio' extra guarantees numpy
 
     width = chunk.sample_width
     if width == 3:
@@ -389,8 +383,8 @@ def read_flac(
 ) -> tuple[np.ndarray, int] | bytes:
     """Read a FLAC file — whole, or a `[start_sec, end_sec]` window — into memory.
 
-    Decoding requires the `audio` extra (pydub + audioop-lts + numpy) and the
-    ffmpeg CLI on PATH; the whole-file `decode=False` fast path needs neither.
+    Decoding shells out to the ffmpeg CLI, which must be on PATH; the
+    whole-file `decode=False` fast path never invokes it.
 
     Args:
         backend: The storage backend to fetch through.
@@ -419,7 +413,6 @@ def read_flac(
         ValueError: If the window is empty, negative, or starts past EOF.
         OndioError: If `uri` is not a valid FLAC stream, or the stream
             reports zero duration and a window was requested.
-        ImportError: If decoding is required and the `audio` extra is missing.
 
     Warning:
         The ranged path estimates byte positions linearly from the header's
@@ -479,7 +472,6 @@ def download_flac(
         ValueError: If the window is empty, negative, or starts past EOF.
         OndioError: If `uri` is not a valid FLAC stream, or the stream
             reports zero duration and a window was requested.
-        ImportError: If a window is given and the `audio` extra is missing.
     """
     if start_sec is None and end_sec is None:
         backend.download(uri, out_path)

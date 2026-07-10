@@ -232,8 +232,8 @@ def read_flac(
 ) -> tuple[np.ndarray, int] | bytes:
     """Read a FLAC file — whole, or a `[start_sec, end_sec]` window — into memory.
 
-    Decoding requires the `audio` extra (pydub + audioop-lts + numpy) and the
-    ffmpeg CLI on PATH; the whole-file `decode=False` fast path needs neither.
+    Decoding shells out to the ffmpeg CLI, which must be on PATH; the
+    whole-file `decode=False` fast path never invokes it.
 
     Args:
         uri: Fully-qualified storage URI of a FLAC file.
@@ -261,7 +261,6 @@ def read_flac(
         ValueError: If the window is empty, negative, or starts past EOF.
         OndioError: If `uri` is not a valid FLAC stream, or the stream
             reports zero duration and a window was requested.
-        ImportError: If decoding is required and the `audio` extra is missing.
 
     Warning:
         The ranged path estimates byte positions linearly from the header's
@@ -309,7 +308,6 @@ def download_flac(
         ValueError: If the window is empty, negative, or starts past EOF.
         OndioError: If `uri` is not a valid FLAC stream, or the stream
             reports zero duration and a window was requested.
-        ImportError: If a window is given and the `audio` extra is missing.
     """
     _flac.download_flac(
         get_backend(uri, **kwargs), uri, out_path, start_sec, end_sec,

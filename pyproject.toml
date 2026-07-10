@@ -1,5 +1,11 @@
 [project]
-dependencies = ["boto3>=1.42,<2"]
+dependencies = [
+    "boto3>=1.42,<2",
+    "numpy",
+    "pydub",
+    # backport of stdlib audioop, removed in Python 3.13; earlier versions ship it
+    "audioop-lts; python_version >= '3.13'",
+]
 name = "ondio"
 readme = "README.md"
 requires-python = ">= 3.11"
@@ -9,7 +15,6 @@ version = "0.1.0"
 gcs = ["google-cloud-storage"]
 parquet = ["pyarrow"]
 http = ["requests"]
-audio = ["soundfile", "numpy"]
 
 [build-system]
 build-backend = "hatchling.build"
@@ -35,8 +40,12 @@ cocina = { git = "https://github.com/SchmidtDSE/cocina", rev = "81ba904aa16a31eb
 
 # Environments
 [tool.pixi.environments]
-default = { features = [] }
-test = { features = ["test"] }
+default = { features = ["audio", "http"] }
+test = { features = ["test", "audio"] }
+
+# pydub shells out to the ffmpeg CLI; pip can't provide the binary, conda can.
+[tool.pixi.feature.audio.dependencies]
+ffmpeg = "*"
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
