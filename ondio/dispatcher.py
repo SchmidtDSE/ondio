@@ -16,6 +16,7 @@ from typing import Any, Literal, overload
 import numpy as np
 
 from ondio import flac as _flac
+from ondio._log import printer
 from ondio.registry import get_backend
 from ondio.types import FlacHeader, OndioError
 
@@ -41,6 +42,7 @@ def download(uri: str, out_path: str | os.PathLike[str], **kwargs: Any) -> None:
         **kwargs: Forwarded to the backend constructor.
     """
     get_backend(uri, **kwargs).download(uri, out_path)
+    printer.message(f"downloaded {uri} to {out_path}")
 
 
 def write(uri: str, data: bytes, **kwargs: Any) -> None:
@@ -87,6 +89,7 @@ def upload(uri: str, source_path: str | os.PathLike[str], **kwargs: Any) -> None
         **kwargs: Forwarded to the backend constructor.
     """
     write(uri, Path(source_path).read_bytes(), **kwargs)
+    printer.message(f"uploaded {source_path} to {uri}")
 
 
 def list_files(

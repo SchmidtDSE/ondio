@@ -67,6 +67,7 @@ import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Literal, overload
 
+from ondio._log import printer
 from ondio.backends.protocol import StorageBackend
 from ondio.types import FlacHeader, OndioError
 
@@ -256,7 +257,12 @@ def _read_window(
     if start_sec >= duration:
         raise ValueError(f"start_sec ({start_sec}) is past the end of the stream ({duration:.3f}s)")
     # Clamp, like Python slices past the end.
-    end_sec = duration if end_sec is None else min(end_sec, duration)
+    if end_sec is None:
+        end_sec = duration
+    elif end_sec > duration:
+        printer.message(f"end_sec {end_sec} exceeds stream duration {duration:.3f}s, clamping")
+        end_sec = duration
+    printer.message(f"windowed FLAC read: {uri}, window {start_sec:.2f}-{end_sec:.2f}s")
 
     file_size = backend.size(uri)
     if use_range is None:
@@ -264,6 +270,10 @@ def _read_window(
             file_size > _RANGE_MIN_FILE_BYTES
             and (end_sec - start_sec) / duration < _RANGE_MAX_WINDOW_RATIO
         )
+    printer.message(
+        f"file info: duration={duration:.1f}s, size={file_size / 2**20:.1f}MB,"
+        f" window ratio={(end_sec - start_sec) / duration:.2f}, use_range={use_range}"
+    )
 
     if use_range:
         from pydub.exceptions import CouldntDecodeError  # audio extra, like pydub
@@ -287,6 +297,10 @@ def _read_window(
         start_byte, end_byte = _estimate_byte_range(
             file_size, header.audio_data_offset, duration, padded_start, padded_end
         )
+        printer.message(
+            f"padded window: {padded_start:.2f}-{padded_end:.2f}s,"
+            f" byte range: {start_byte}-{end_byte}"
+        )
 
         error: Exception | None = None
         audio = None
@@ -299,6 +313,9 @@ def _read_window(
         # cover the window) is raised, never returned short.
         rel_ms = round((start_sec - padded_start) * 1000)
         if audio is not None and len(audio) >= rel_ms + window_ms:
+            printer.message(
+                f"decoded {len(audio)}ms, returning {window_ms}ms at offset {rel_ms}ms"
+            )
             return audio[rel_ms:rel_ms + window_ms]
         raise OndioError(
             f"ranged read could not cover [{start_sec}, {end_sec}]s of {uri}:"
@@ -310,6 +327,7 @@ def _read_window(
         ) from error
 
     audio = _decode_flac(backend.read(uri))
+    printer.message(f"full download decoded: {len(audio)}ms")
     return audio[round(start_sec * 1000):round(end_sec * 1000)]
 
 

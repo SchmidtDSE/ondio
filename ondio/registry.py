@@ -5,6 +5,7 @@ from __future__ import annotations
 from importlib import import_module
 from urllib.parse import urlparse
 
+from ondio._log import printer
 from ondio.backends.gcs import GcsBackend
 from ondio.types import UnknownPlatformError
 from ondio.backends.protocol import StorageBackend
@@ -40,6 +41,7 @@ def detect_platform(uri: str) -> str:
 def get_backend(uri: str, **kwargs) -> StorageBackend:
     """Resolve the backend for a given URI. kwargs are forwarded to the backend constructor."""
     platform = detect_platform(uri)
+    printer.message(f"using {platform} backend for {uri}")
     module_name, class_name = _BACKEND_FACTORIES[platform]
     factory = getattr(import_module(module_name), class_name) 
     backend = factory(**kwargs)
