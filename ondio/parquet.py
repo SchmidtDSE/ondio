@@ -10,7 +10,7 @@ from ondio.dispatcher import delete, list_files, upload
 from ondio.types import OndioError
 
 
-def upload_parquet(
+def write_parquet(
     uri: str,
     table,
     partition_cols: list[str],
@@ -20,7 +20,7 @@ def upload_parquet(
     max_workers: int | None = None,
     **kwargs: Any,
 ) -> None:
-    """Upload a `pyarrow.Table` as a hive-partitioned parquet dataset under `uri`.
+    """Write a `pyarrow.Table` as a hive-partitioned parquet dataset under `uri`.
 
     The dataset is written to a local temp directory via pyarrow, then uploaded
     file-by-file through the backend — pyarrow's native S3/GCS filesystems are
@@ -46,7 +46,7 @@ def upload_parquet(
         import pyarrow.dataset as pads
     except ImportError as exc:
         raise ImportError(
-            "upload_parquet requires the 'parquet' extra: pip install ondio[parquet]"
+            "write_parquet requires the 'parquet' extra: pip install ondio[parquet]"
         ) from exc
 
     existing = list_files(uri, **kwargs)

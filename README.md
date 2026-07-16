@@ -116,7 +116,7 @@ reads the window exactly.
 ## Parquet
 
 Model results go out as hive-partitioned parquet datasets via
-`ondio.parquet.upload_parquet` (requires the `parquet` extra for pyarrow). The
+`ondio.parquet.write_parquet` (requires the `parquet` extra for pyarrow). The
 dataset is written to a local temp directory with pyarrow, then uploaded
 file-by-file through the backend — pyarrow's native S3/GCS filesystems are
 deliberately not used (this would require extra credential config), so credentials 
@@ -124,7 +124,7 @@ follow the same path as every other `ondio` call.
 
 ```python
 import pyarrow as pa
-from ondio.parquet import upload_parquet
+from ondio.parquet import write_parquet
 
 table = pa.table({
     "site": ["A", "A", "B"],
@@ -134,10 +134,10 @@ table = pa.table({
 })
 
 # writes s3://my-bucket/results/run-1/site=A/date=2026-04-02/part-0.parquet, ...
-upload_parquet("s3://my-bucket/results/run-1", table, partition_cols=["site", "date"])
+write_parquet("s3://my-bucket/results/run-1", table, partition_cols=["site", "date"])
 
 # partition_cols=[] writes a flat (unpartitioned) dataset under the prefix
-upload_parquet("s3://my-bucket/results/run-2/", table, partition_cols=[])
+write_parquet("s3://my-bucket/results/run-2/", table, partition_cols=[])
 ```
 
 Details of use:
@@ -252,7 +252,7 @@ implement format-specific logic.
 | `extract_flac_header(uri)` | Parse FLAC STREAMINFO, fetching only header bytes |
 | `read_flac(uri, start_sec, end_sec, decode=…)` | FLAC (whole or windowed) → PCM array or FLAC bytes |
 | `download_flac(uri, out_path, start_sec, end_sec)` | FLAC (whole or windowed) → local `.flac` file |
-| `upload_parquet(uri, table, partition_cols)` | `pyarrow.Table` → hive-partitioned dataset (in `ondio.parquet`) |
+| `write_parquet(uri, table, partition_cols)` | `pyarrow.Table` → hive-partitioned dataset (in `ondio.parquet`) |
 | `list_files(uri_prefix)` | Full URIs under a prefix, sorted; optional filename prefix/extension filters |
 | `object_count(uri_prefix)` | Count objects under a prefix without listing them; same filters |
 | `exists(uri)` | Whether the object exists |
@@ -271,7 +271,7 @@ Each call resolves a backend from the URI scheme and delegates to it:
 │   bytes/objects:  read · write · download · upload              │
 │                   download_files · exists · delete              │
 │                   list_files · object_count                     │
-│   json/parquet:   write_json · read_json · upload_parquet       │
+│   json/parquet:   write_json · read_json · write_parquet        │
 │   flac:           extract_flac_header · read_flac               │
 │                   download_flac                                 │
 └──────────────┬───────────────────────────────┬──────────────────┘
@@ -283,7 +283,7 @@ Each call resolves a backend from the URI scheme and delegates to it:
 │   URI scheme → platform  │    │   flac.py     header parsing +  │
 │   → backend factory      │    │               partial reads     │
 │                          │    │                                 │
-│                          │    │   parquet.py  upload_parquet    │
+│                          │    │   parquet.py  write_parquet     │
 │                          │    │               (pyarrow)         │
 └──────────────┬───────────┘    └───────────────┬─────────────────┘
                │                    backend-agnostic: built on the protocol
