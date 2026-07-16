@@ -130,4 +130,4 @@ class TestJson:
         uri = f"{prefix}/meta.json"
         data = {"id": "rec-7", "tags": ["dawn"]}
         ondio.write_json(uri, data)
-        assert ondio.download_json(uri) == data
+        assert ondio.read_json(uri) == data

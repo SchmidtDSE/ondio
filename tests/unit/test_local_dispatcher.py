@@ -160,7 +160,7 @@ class TestJsonAndFiles:
         uri = str(tmp_path / "meta.json")
         data = {"id": "rec-7", "tags": ["dawn", "chorus"], "gain_db": -3.5}
         ondio.write_json(uri, data)
-        assert ondio.download_json(uri) == data
+        assert ondio.read_json(uri) == data
 
     def test_upload_from_disk(self, tmp_path):
         src = tmp_path / "src.bin"

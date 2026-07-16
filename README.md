@@ -24,7 +24,7 @@ The API draws one distinction consistently:
 
 The format helpers follow the same rule: `read_flac` returns decoded samples or
 FLAC bytes in memory, while `download_flac` writes a local `.flac` file;
-`write_json` serializes a Python object straight to a URI, and `download_json`
+`write_json` serializes a Python object straight to a URI, and `read_json`
 fetches and parses one.
 
 ## Objects, files, and JSON
@@ -41,7 +41,7 @@ ondio.write("s3://my-bucket/results/example.txt", b"done")
 
 # JSON <-> Python objects, no local file involved
 ondio.write_json("s3://my-bucket/results//summary.json", {"detections": 118})
-summary = ondio.download_json("s3://my-bucket/results/summary.json")
+summary = ondio.read_json("s3://my-bucket/results/summary.json")
 
 # moving files on/off disk
 ondio.download("gs://my-bucket/audio/rec.flac", "data/rec.flac")
@@ -245,7 +245,7 @@ implement format-specific logic.
 |-|-|
 | `read(uri)` | Read the full object at `uri` into memory as `bytes` |
 | `write(uri, data)` | Write in-memory `bytes` to `uri` |
-| `write_json(uri, obj)` / `download_json(uri)` | JSON objects, serialized/parsed |
+| `write_json(uri, obj)` / `read_json(uri)` | JSON objects, serialized/parsed |
 | `download(uri, out_path)` | Download the object at `uri` to a local file |
 | `download_files(uris, local_dir)` | Download many objects into a directory, named by basename; returns local paths in input order |
 | `upload(uri, source_path)` | Upload a local file to `uri` |
@@ -271,7 +271,7 @@ Each call resolves a backend from the URI scheme and delegates to it:
 │   bytes/objects:  read · write · download · upload              │
 │                   download_files · exists · delete              │
 │                   list_files · object_count                     │
-│   json/parquet:   write_json · download_json · upload_parquet   │
+│   json/parquet:   write_json · read_json · upload_parquet       │
 │   flac:           extract_flac_header · read_flac               │
 │                   download_flac                                 │
 └──────────────┬───────────────────────────────┬──────────────────┘

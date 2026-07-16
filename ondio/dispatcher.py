@@ -134,8 +134,8 @@ def write_json(uri: str, data: Any, **kwargs: Any) -> None:
     write(uri, json.dumps(data, ensure_ascii=False).encode("utf-8"), **kwargs)
 
 
-def download_json(uri: str, **kwargs: Any) -> Any:
-    """Download and parse the JSON object at `uri`.
+def read_json(uri: str, **kwargs: Any) -> Any:
+    """Read and parse the JSON object at `uri`.
 
     Args:
         uri: Fully-qualified storage URI of a JSON document.
