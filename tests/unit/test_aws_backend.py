@@ -85,11 +85,51 @@ class TestListing:
             f"{prefix}/audio/notes.txt",
         ]
         assert len(ondio.list_files(f"{prefix}/audio/", max_items=2)) == 2
-        # S3-style string prefix
-        assert ondio.list_files(f"{prefix}/audio/chunk_") == [
+
+    def test_folder_semantics_without_trailing_slash(self, prefix, tree):
+        # no trailing slash lists the folder's contents, recursive or not
+        assert ondio.list_files(f"{prefix}/audio") == ondio.list_files(f"{prefix}/audio/")
+        assert ondio.list_files(f"{prefix}/audio", recursive=False) == [
             f"{prefix}/audio/chunk_001.flac",
             f"{prefix}/audio/chunk_002.flac",
+            f"{prefix}/audio/notes.txt",
         ]
+
+    def test_partial_name_path_never_matches(self, prefix, tree):
+        # folder semantics: "chunk_" is neither a folder nor an exact key
+        assert ondio.list_files(f"{prefix}/audio/chunk_") == []
+        assert ondio.object_count(f"{prefix}/audio/chunk_") == 0
+
+    def test_listing_a_key_yields_that_key(self, prefix, tree):
+        uri = f"{prefix}/audio/chunk_001.flac"
+        assert ondio.list_files(uri) == [uri]
+        assert ondio.list_files(uri, recursive=False) == [uri]
+        assert ondio.object_count(uri) == 1
+        assert ondio.list_files(uri, required_ext="flac") == [uri]
+        assert ondio.list_files(uri, required_ext="txt") == []
+
+    def test_trailing_slash_excludes_the_exact_key(self, prefix, tree):
+        # a trailing slash names folder contents only
+        uri = f"{prefix}/audio/chunk_001.flac"
+        assert ondio.list_files(f"{uri}/") == []
+        assert ondio.object_count(f"{uri}/") == 0
+
+    def test_max_items_counts_the_exact_key(self, prefix, tree):
+        # the exact key sorts ahead of everything under it, so the server-side
+        # cap stays valid — this breaks if the cap is applied without it
+        ondio.write(f"{prefix}/audio", b"an object at the folder's own key")
+        assert ondio.list_files(f"{prefix}/audio", max_items=2) == [
+            f"{prefix}/audio",
+            f"{prefix}/audio/chunk_001.flac",
+        ]
+
+    def test_sibling_prefixes_are_isolated(self, prefix):
+        for key in ["results/run-1/a.parquet", "results/run-10/b.parquet", "results/run-111/c.parquet"]:
+            ondio.write(f"{prefix}/{key}", b"x")
+        assert ondio.list_files(f"{prefix}/results/run-1") == [
+            f"{prefix}/results/run-1/a.parquet"
+        ]
+        assert ondio.object_count(f"{prefix}/results/run-1") == 1
 
     def test_list_files_filename_filters(self, prefix, tree):
         flacs = ondio.list_files(f"{prefix}/audio/", required_ext="flac")
@@ -117,6 +157,12 @@ class TestListing:
         listed = ondio.list_files(f"{prefix}/audio/")
         assert f"{prefix}/audio/sub2/" not in listed
         assert len(listed) == 4
+
+    def test_object_count_skips_folder_placeholders(self, prefix, tree):
+        ondio.write(f"{prefix}/audio/sub2/", b"")  # console-style folder marker
+        assert ondio.object_count(f"{prefix}/audio/") == 4
+        # count and listing always agree, placeholders or not
+        assert ondio.object_count(f"{prefix}/audio/") == len(ondio.list_files(f"{prefix}/audio/"))
 
     def test_object_count(self, prefix, tree):
         assert ondio.object_count(f"{prefix}/audio/") == 4

@@ -1,4 +1,4 @@
-"""write_parquet tests against the local backend (needs the `parquet` extra)."""
+"""write_parquet tests: local backend plus moto-backed S3 (needs the `parquet` extra)."""
 
 import pytest
 
@@ -56,3 +56,24 @@ def test_unpartitioned(tmp_path, table):
     prefix = str(tmp_path / "flat")
     parquet_mod.write_parquet(prefix, table, [])
     assert read_back(prefix) == [(1, "north"), (2, "north"), (3, "south"), (4, "south")]
+
+
+def test_sibling_datasets_are_isolated_local(tmp_path, table):
+    root = tmp_path / "results"
+    parquet_mod.write_parquet(str(root / "run-10"), table, ["site"])
+    # a first write next to a sibling must neither refuse (overwrite=False
+    # false positive) nor touch the sibling
+    parquet_mod.write_parquet(str(root / "run-1"), table, ["site"])
+    parquet_mod.write_parquet(str(root / "run-1"), table, ["site"], overwrite=True)
+    assert read_back(str(root / "run-10")) == [(1, "north"), (2, "north"), (3, "south"), (4, "south")]
+    assert read_back(str(root / "run-1")) == [(1, "north"), (2, "north"), (3, "south"), (4, "south")]
+
+
+def test_sibling_datasets_are_isolated_s3(aws_bucket, table):
+    parquet_mod.write_parquet(f"{aws_bucket}/results/run-10", table, ["site"])
+    neighbor_files = ondio.list_files(f"{aws_bucket}/results/run-10")
+    assert neighbor_files
+    neighbor_bytes = {f: ondio.read(f) for f in neighbor_files}
+    parquet_mod.write_parquet(f"{aws_bucket}/results/run-1", table, ["site"], overwrite=True)
+    assert ondio.list_files(f"{aws_bucket}/results/run-10") == neighbor_files
+    assert {f: ondio.read(f) for f in neighbor_files} == neighbor_bytes

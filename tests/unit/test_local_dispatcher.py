@@ -108,11 +108,33 @@ class TestListing:
     def test_max_items(self, tree):
         assert len(ondio.list_files(str(tree), max_items=2)) == 2
 
-    def test_string_prefix_matches_like_s3(self, tree):
-        assert ondio.list_files(str(tree / "chunk_")) == [
-            str(tree / "chunk_001.flac"),
-            str(tree / "chunk_002.flac"),
+    def test_partial_name_path_never_matches(self, tree):
+        # folder semantics: "chunk_" is neither a folder nor an exact file
+        assert ondio.list_files(str(tree / "chunk_")) == []
+        assert ondio.object_count(str(tree / "chunk_")) == 0
+
+    def test_listing_a_file_yields_that_file(self, tree):
+        target = str(tree / "chunk_001.flac")
+        assert ondio.list_files(target) == [target]
+        assert ondio.object_count(target) == 1
+        assert ondio.list_files(target, required_ext="flac") == [target]
+        assert ondio.list_files(target, required_ext="txt") == []
+
+    def test_trailing_slash_excludes_the_exact_file(self, tree):
+        # a trailing slash names folder contents only, as on the cloud backends
+        target = str(tree / "chunk_001.flac")
+        assert ondio.list_files(f"{target}/") == []
+        assert ondio.object_count(f"{target}/") == 0
+
+    def test_sibling_directories_are_isolated(self, tmp_path):
+        for name in ["results/run-1/a.parquet", "results/run-10/b.parquet", "results/run-111/c.parquet"]:
+            path = tmp_path / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(b"x")
+        assert ondio.list_files(str(tmp_path / "results/run-1")) == [
+            str(tmp_path / "results/run-1/a.parquet")
         ]
+        assert ondio.object_count(str(tmp_path / "results/run-1")) == 1
 
     def test_no_matches_is_empty(self, tmp_path):
         assert ondio.list_files(str(tmp_path / "nowhere")) == []

@@ -156,6 +156,42 @@ class TestListing:
         ]
         assert len(backend.list_files(f"{PREFIX}/audio/", max_items=2)) == 2
 
+    def test_folder_semantics_without_trailing_slash(self, backend):
+        # no trailing slash lists the folder's contents, recursive or not
+        assert backend.list_files(f"{PREFIX}/audio") == backend.list_files(f"{PREFIX}/audio/")
+        assert backend.list_files(f"{PREFIX}/audio", recursive=False) == [
+            f"{PREFIX}/audio/chunk_001.flac",
+            f"{PREFIX}/audio/chunk_002.flac",
+            f"{PREFIX}/audio/notes.txt",
+        ]
+
+    def test_partial_name_path_never_matches(self, backend):
+        # folder semantics: "chunk_" is neither a folder nor an exact key
+        assert backend.list_files(f"{PREFIX}/audio/chunk_") == []
+        assert backend.object_count(f"{PREFIX}/audio/chunk_") == 0
+
+    def test_listing_a_key_yields_that_key(self, backend):
+        uri = f"{PREFIX}/audio/chunk_001.flac"
+        assert backend.list_files(uri) == [uri]
+        assert backend.list_files(uri, recursive=False) == [uri]
+        assert backend.object_count(uri) == 1
+        assert backend.list_files(uri, required_ext="flac") == [uri]
+        assert backend.list_files(uri, required_ext="txt") == []
+
+    def test_trailing_slash_excludes_the_exact_key(self, backend):
+        # a trailing slash names folder contents only
+        uri = f"{PREFIX}/audio/chunk_001.flac"
+        assert backend.list_files(f"{uri}/") == []
+        assert backend.object_count(f"{uri}/") == 0
+
+    def test_sibling_prefixes_are_isolated(self, backend, store):
+        store["results/run-1/a.parquet"] = b""
+        store["results/run-10/b.parquet"] = b""
+        assert backend.list_files(f"{PREFIX}/results/run-1") == [
+            f"{PREFIX}/results/run-1/a.parquet"
+        ]
+        assert backend.object_count(f"{PREFIX}/results/run-1") == 1
+
     def test_list_files_filename_filters(self, backend):
         flacs = backend.list_files(f"{PREFIX}/audio/", required_ext="flac")
         assert flacs == [
@@ -182,6 +218,12 @@ class TestListing:
         listed = backend.list_files(f"{PREFIX}/audio/")
         assert f"{PREFIX}/audio/dir/" not in listed
         assert len(listed) == 4
+
+    def test_object_count_skips_folder_placeholders(self, backend, store):
+        store["audio/dir/"] = b""  # console-style folder marker
+        assert backend.object_count(f"{PREFIX}/audio/") == 4
+        # count and listing always agree, placeholders or not
+        assert backend.object_count(f"{PREFIX}/audio/") == len(backend.list_files(f"{PREFIX}/audio/"))
 
     def test_object_count(self, backend):
         assert backend.object_count(f"{PREFIX}/audio/") == 4
