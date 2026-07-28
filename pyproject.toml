@@ -13,7 +13,7 @@ license = "BSD-3-Clause"
 license-files = ["LICENSE.md"]
 authors = [{ name = "Michael Catchen", email = "mdcatchen@gmail.com" }]
 requires-python = ">= 3.11"
-version = "0.1.1"
+version = "0.2.0"
 
 [project.optional-dependencies]
 gcs = ["google-cloud-storage"]
@@ -82,11 +82,11 @@ hatchling = "*"
 twine = "*"
 
 [tool.pixi.feature.build.tasks]
-build = "rm -rf dist && python -m build --no-isolation"
-check-dist = "twine check dist/*"
-publish = { cmd = "twine upload dist/*", depends-on = ["build", "check-dist"] }
+build = { cmd = "rm -rf dist && python -m build --no-isolation", description = "Build the sdist and wheel into a clean dist/" }
+check-dist = { cmd = "twine check dist/*", description = "Validate the built artifacts' metadata before upload" }
+publish = { cmd = "twine upload dist/*", depends-on = ["build", "check-dist"], description = "Build, check, then upload to PyPI" }
 
 [tool.pixi.feature.test.tasks]
-test = "pytest"
-test-unit = "pytest tests/unit -m 'not integration and not slow'"
-test-doctest = "pytest --doctest-modules --import-mode=importlib ondio"
+test = { cmd = "pytest", description = "Run the whole suite (unit, integration, slow, doctests)" }
+test-unit = { cmd = "pytest tests/unit -m 'not integration and not slow'", description = "Run the fast unit tests only — the default inner-loop check" }
+test-doctest = { cmd = "pytest --doctest-modules --import-mode=importlib ondio", description = "Run the docstring examples in ondio/ as tests" }
