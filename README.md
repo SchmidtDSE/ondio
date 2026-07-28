@@ -64,6 +64,25 @@ if ondio.exists("s3://my-bucket/tmp/scratch.json"):
 ondio.list_files("s3://my-bucket/audio/", profile_name="dse")
 ```
 
+Listing prefixes have folder semantics on every backend: a path names the
+object at that exact location plus everything under it as a folder, never
+sibling objects that merely share leading characters —
+`s3://my-bucket/results/run-1` matches `results/run-1/…` but **not**
+`results/run-10/…`. To match objects by partial *filename* (e.g. everything
+starting with `chunk_`), use `required_prefix` as above.
+
+A **trailing slash narrows the path to folder contents only**, excluding an
+object stored at the path itself. This matters only where both exist:
+
+```python
+ondio.list_files("s3://my-bucket/results/run-1")   # the run-1 object, if any, plus run-1/…
+ondio.list_files("s3://my-bucket/results/run-1/")  # only run-1/… — never the run-1 object
+```
+
+`object_count(prefix)` always equals `len(list_files(prefix))` given the same
+filters, on every backend — folder placeholder objects (the empty `dir/` keys
+some consoles create) are counted by neither.
+
 ## FLAC
 
 FLAC-specific IO lives behind the same read/download split. Decoding requires
@@ -253,8 +272,8 @@ implement format-specific logic.
 | `read_flac(uri, start_sec, end_sec, decode=…)` | FLAC (whole or windowed) → PCM array or FLAC bytes |
 | `download_flac(uri, out_path, start_sec, end_sec)` | FLAC (whole or windowed) → local `.flac` file |
 | `write_parquet(uri, table, partition_cols)` | `pyarrow.Table` → hive-partitioned dataset (in `ondio.parquet`) |
-| `list_files(uri_prefix)` | Full URIs under a prefix, sorted; optional filename prefix/extension filters |
-| `object_count(uri_prefix)` | Count objects under a prefix without listing them; same filters |
+| `list_files(uri_prefix)` | Full URIs under a folder path (exact object plus its contents), sorted; optional filename prefix/extension filters |
+| `object_count(uri_prefix)` | Count objects under a folder path without listing them; same filters |
 | `exists(uri)` | Whether the object exists |
 | `delete(uri)` | Delete the object; missing objects are a no-op |
 
