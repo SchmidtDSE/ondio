@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ondio.backends.protocol import _matches_filters
+from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
 from ondio.types import AuthError, ObjectNotFoundError, OndioError
 
 
@@ -105,9 +105,14 @@ class GcsBackend:
         required_ext: str | None = None,
     ) -> list[str]:
         bucket, key = _split(uri_prefix)
+        key, exact_key = _folder_match(key)
+        exact_uri = f"gs://{bucket}/{exact_key}" if exact_key is not None else None
         # The filters apply to the *filename* of every (recursively listed)
         # key, so they cannot be folded into the native prefix, and the native
         # max_results counts unfiltered keys — cap after filtering instead.
+        # The native cap survives the exact-key check, though: exact_key is a
+        # strict prefix of every key under "exact_key/", so it sorts ahead of
+        # them all and the final slice still yields the true first max_items.
         filtered = required_prefix is not None or required_ext is not None
         with self._translate(uri_prefix):
             blobs = self._client.list_blobs(
@@ -122,6 +127,10 @@ class GcsBackend:
                 if not blob.name.endswith("/")
                 and _matches_filters(blob.name.rsplit("/", 1)[-1], required_prefix, required_ext)
             ]
+        if exact_uri is not None and _exact_object_matches(
+            self.size, exact_uri, required_prefix, required_ext
+        ):
+            results.append(exact_uri)
         results.sort()
         return results if max_items is None else results[:max_items]
 
@@ -133,14 +142,23 @@ class GcsBackend:
         required_ext: str | None = None,
     ) -> int:
         bucket, key = _split(uri_prefix)
+        key, exact_key = _folder_match(key)
+        exact_uri = f"gs://{bucket}/{exact_key}" if exact_key is not None else None
         # required_prefix filters the *filename* of every (recursively listed)
         # key, so it cannot be folded into the native prefix — that would miss
-        # nested keys like sub/chunk_003.flac.
+        # nested keys like sub/chunk_003.flac. Folder placeholders are skipped,
+        # as in list_files.
         count = 0
         with self._translate(uri_prefix):
             for blob in self._client.list_blobs(bucket, prefix=key):
+                if blob.name.endswith("/"):
+                    continue
                 if _matches_filters(blob.name.rsplit("/", 1)[-1], required_prefix, required_ext):
                     count += 1
+        if exact_uri is not None and _exact_object_matches(
+            self.size, exact_uri, required_prefix, required_ext
+        ):
+            count += 1
         return count
 
     def exists(self, uri: str) -> bool:

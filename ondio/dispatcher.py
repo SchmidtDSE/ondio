@@ -170,9 +170,15 @@ def list_files(
 ) -> list[str]:
     """List full URIs under a prefix, lexicographically sorted.
 
+    The prefix has folder semantics on every backend: it names the object at
+    that exact path (if one exists) plus everything under it as a folder —
+    never sibling objects that merely share leading characters
+    ("results/run-1" does not match "results/run-10/x"). To match objects by
+    partial *filename*, use `required_prefix` instead.
+
     Args:
-        uri_prefix: Prefix to list under (a "directory" URI or a partial
-            object name, S3-style).
+        uri_prefix: Prefix to list under (a "directory" URI or an exact
+            object URI).
         recursive: If False, list only the immediate level.
         max_items: Cap on the number of results, applied after the filename
             filters; None means unbounded.
@@ -202,10 +208,15 @@ def object_count(
 ) -> int:
     """Count objects under a prefix (always recursive) without building URI lists.
 
-    Cheaper than `len(list_files(...))` when only a count is needed.
+    Same folder semantics as `list_files`: the prefix names the object at that
+    exact path (if one exists) plus everything under it as a folder, never
+    sibling objects that merely share leading characters. The result always
+    equals `len(list_files(...))` given the same filters — it just skips
+    building the URI list.
 
     Args:
-        uri_prefix: Prefix to count under.
+        uri_prefix: Prefix to count under (a "directory" URI or an exact
+            object URI).
         required_prefix: If given, count only objects whose *filename* starts
             with this (applied to every recursively listed key).
         required_ext: If given, count only objects with this file extension

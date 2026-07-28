@@ -7,7 +7,7 @@ import os
 from pathlib import Path
 from urllib.parse import urlparse
 
-from ondio.backends.protocol import _matches_filters
+from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
 from ondio.types import AuthError, ObjectNotFoundError, OndioError
 
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NoSuchBucket"}
@@ -101,11 +101,16 @@ class AwsBackend:
         required_ext: str | None = None,
     ) -> list[str]:
         bucket, key = _split(uri_prefix)
+        key, exact_key = _folder_match(key)
+        exact_uri = f"s3://{bucket}/{exact_key}" if exact_key is not None else None
         # required_prefix filters the *filename* of every (recursively listed)
         # key, so it cannot be folded into the native Prefix — that would miss
         # nested keys like sub/chunk_003.flac.
-        # Likewise the native MaxItems counts unfiltered keys, so max_items 
-        # must be applied after filtering.
+        # Likewise the native MaxItems counts unfiltered keys, so max_items
+        # must be applied after filtering. The native cap survives the
+        # exact-key check, though: exact_key is a strict prefix of every key
+        # under "exact_key/", so it sorts ahead of them all and the final
+        # slice still yields the true first max_items.
         filtered = required_prefix is not None or required_ext is not None
         paginate_kwargs: dict = {"Bucket": bucket, "Prefix": key}
         if not recursive:
@@ -122,6 +127,10 @@ class AwsBackend:
                     name = obj["Key"].rsplit("/", 1)[-1]
                     if _matches_filters(name, required_prefix, required_ext):
                         results.append(f"s3://{bucket}/{obj['Key']}")
+        if exact_uri is not None and _exact_object_matches(
+            self.size, exact_uri, required_prefix, required_ext
+        ):
+            results.append(exact_uri)
         results.sort()
         return results if max_items is None else results[:max_items]
 
@@ -133,19 +142,26 @@ class AwsBackend:
         required_ext: str | None = None,
     ) -> int:
         bucket, key = _split(uri_prefix)
+        key, exact_key = _folder_match(key)
+        exact_uri = f"s3://{bucket}/{exact_key}" if exact_key is not None else None
         # required_prefix filters the *filename* of every (recursively listed)
         # key, so it cannot be folded into the native Prefix — that would miss
-        # nested keys like sub/chunk_003.flac.
+        # nested keys like sub/chunk_003.flac. Folder placeholders are skipped
+        # (not counted by list_files, so not counted here either) — hence no
+        # KeyCount fast path.
         count = 0
         with self._translate(uri_prefix):
             for page in self._client.get_paginator("list_objects_v2").paginate(Bucket=bucket, Prefix=key):
-                if required_prefix is None and required_ext is None:
-                    count += page.get("KeyCount", len(page.get("Contents", [])))
-                    continue
                 for obj in page.get("Contents", []):
+                    if obj["Key"].endswith("/"):
+                        continue
                     name = obj["Key"].rsplit("/", 1)[-1]
                     if _matches_filters(name, required_prefix, required_ext):
                         count += 1
+        if exact_uri is not None and _exact_object_matches(
+            self.size, exact_uri, required_prefix, required_ext
+        ):
+            count += 1
         return count
 
     def exists(self, uri: str) -> bool:

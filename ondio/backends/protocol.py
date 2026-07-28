@@ -7,7 +7,10 @@ in the dispatcher and file-format specific modules — backends deal only in byt
 from __future__ import annotations
 
 import os
+from collections.abc import Callable
 from typing import Protocol
+
+from ondio.types import ObjectNotFoundError
 
 def _matches_filters(
     name: str, required_prefix: str | None, required_ext: str | None
@@ -19,6 +22,41 @@ def _matches_filters(
         ext = required_ext if required_ext.startswith(".") else f".{required_ext}"
         if not name.endswith(ext):
             return False
+    return True
+
+
+def _folder_match(key: str) -> tuple[str, str | None]:
+    """Split a listing prefix into (folder prefix, exact key) for folder semantics.
+
+    A prefix names a folder: it matches the object at that exact key plus
+    everything under "key/" — never sibling keys that merely share leading
+    characters ("results/run-1" does not match "results/run-10/x"). A prefix
+    that is empty or ends in "/" names folder contents only.
+    """
+    if key and not key.endswith("/"):
+        return f"{key}/", key
+    return key, None
+
+
+def _exact_object_matches(
+    size: Callable[[str], int],
+    uri: str,
+    required_prefix: str | None,
+    required_ext: str | None,
+) -> bool:
+    """Whether an object exists at exactly `uri` and passes the filename filters.
+
+    The `exact_key` half of `_folder_match`, shared by the object-store
+    backends: a native prefix listing cannot express "this key and everything
+    below it, but not its siblings", so they list "key/" for the folder
+    contents and probe the bare key separately.
+    """
+    if not _matches_filters(uri.rsplit("/", 1)[-1], required_prefix, required_ext):
+        return False
+    try:
+        size(uri)
+    except ObjectNotFoundError:
+        return False
     return True
 
 
@@ -114,6 +152,12 @@ class StorageBackend(Protocol):
     ) -> list[str]:
         """List full URIs (not bare keys) under a prefix, lexicographically sorted.
 
+        The prefix has folder semantics on every backend: it matches the
+        object at that exact path (if one exists) and every object under it
+        as a folder, but never sibling objects that merely share leading
+        characters — "results/run-1" matches "results/run-1" and
+        "results/run-1/x" but not "results/run-10/x".
+
         Args:
             uri_prefix: Prefix to list under.
             recursive: If False, list only the immediate level.
@@ -137,6 +181,10 @@ class StorageBackend(Protocol):
         required_ext: str | None = None,
     ) -> int:
         """Count objects under a prefix (always recursive) without building URI lists.
+
+        Same folder semantics as `list_files` (an exact-path object counts,
+        folder placeholder keys do not), so `object_count(p)` always equals
+        `len(list_files(p))` given the same filters.
 
         Args:
             uri_prefix: Prefix to count under.

@@ -49,7 +49,13 @@ def write_parquet(
             "write_parquet requires the 'parquet' extra: pip install ondio[parquet]"
         ) from exc
 
-    existing = list_files(uri, **kwargs)
+    # The backends give prefixes folder semantics, so listing "results/run-1"
+    # can no longer match keys under "results/run-10/". The trailing slash is
+    # kept as a permanent second layer (awscli does the same for recursive
+    # rm/cp): it also excludes an object stored at the exact key
+    # "results/run-1" from the delete set, which is not part of the dataset.
+    base = uri.rstrip("/")
+    existing = list_files(f"{base}/", **kwargs)
     if existing:
         if not overwrite:
             raise OndioError(
@@ -69,7 +75,6 @@ def write_parquet(
             partitioning_flavor="hive" if partition_cols else None,
             file_options=pads.ParquetFileFormat().make_write_options(compression=compression),
         )
-        base = uri.rstrip("/")
         files = sorted(p for p in Path(tmp).rglob("*") if p.is_file())
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             futures = [

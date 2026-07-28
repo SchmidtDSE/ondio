@@ -116,24 +116,25 @@ class LocalBackend:
             raise _wrap_oserror(uri, exc) from exc
 
     def _iter_matches(self, uri_prefix: str, *, recursive: bool):
-        """Files matching a prefix, S3-style: a directory prefix matches everything
-        under it; otherwise the prefix matches any path that starts with it as a
-        string (e.g. /data/chunk_ matches /data/chunk_001.flac)."""
+        """Files named by a folder path: an existing directory yields the files
+        under it (recursively, or one level deep); a path that is itself a file
+        yields just that file; anything else yields nothing. A partial name
+        never matches: /data/chunk_ does not match /data/chunk_001.flac."""
         base = _to_path(uri_prefix)
-        if base.is_dir():
-            root, filter_prefix = base, None
-        else:
-            root, filter_prefix = base.parent, str(base)
-        if not root.is_dir():
+        # A trailing slash names folder contents only, so it excludes the file
+        # at that exact path — matching _folder_match on the cloud backends.
+        # The check is on the raw URI: _to_path has already dropped the slash.
+        if not uri_prefix.endswith("/") and base.is_file():
+            yield base
+            return
+        if not base.is_dir():
             return
         if recursive:
             candidates = (
                 Path(dirpath) / name
-                for dirpath, _, filenames in os.walk(root)
+                for dirpath, _, filenames in os.walk(base)
                 for name in filenames
             )
         else:
-            candidates = (p for p in root.iterdir() if p.is_file())
-        for path in candidates:
-            if filter_prefix is None or str(path).startswith(filter_prefix):
-                yield path
+            candidates = (p for p in base.iterdir() if p.is_file())
+        yield from candidates
