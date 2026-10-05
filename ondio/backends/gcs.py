@@ -95,6 +95,12 @@ class GcsBackend:
         with self._translate(uri):
             self._blob(uri).download_to_filename(str(dest))
 
+    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+        with self._translate(uri):
+            self._blob(uri).upload_from_filename(
+                str(source_path), content_type="application/octet-stream"
+            )
+
     def list_files(
         self,
         uri_prefix: str,

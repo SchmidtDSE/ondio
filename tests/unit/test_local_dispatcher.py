@@ -1,5 +1,7 @@
 """Dispatcher-level tests exercised against the local backend."""
 
+from pathlib import Path
+
 import pytest
 
 import ondio
@@ -190,3 +192,31 @@ class TestJsonAndFiles:
         uri = str(tmp_path / "dest" / "copy.bin")
         ondio.upload(uri, src)
         assert ondio.read(uri) == b"contents"
+
+    def test_upload_replaces_existing_file(self, tmp_path):
+        first, second = tmp_path / "first.bin", tmp_path / "second.bin"
+        first.write_bytes(b"first")
+        second.write_bytes(b"second")
+        uri = str(tmp_path / "dest" / "a.bin")
+        ondio.upload(uri, first)
+        ondio.upload(uri, second)
+        assert ondio.read(uri) == b"second"
+
+    def test_upload_missing_source_raises(self, tmp_path):
+        dest = tmp_path / "dest" / "a.bin"
+        with pytest.raises(FileNotFoundError):
+            ondio.upload(str(dest), tmp_path / "absent.bin")
+        assert not dest.exists()
+
+    def test_upload_does_not_read_whole_source(self, tmp_path, monkeypatch):
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"contents")
+        dest = tmp_path / "dest" / "copy.bin"
+
+        def refuse(self):
+            raise AssertionError("upload read the whole source into memory")
+
+        monkeypatch.setattr(Path, "read_bytes", refuse)
+        ondio.upload(str(dest), src)
+        with open(dest, "rb") as f:  # read_bytes is patched out
+            assert f.read() == b"contents"

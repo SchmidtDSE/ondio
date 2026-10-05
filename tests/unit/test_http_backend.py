@@ -58,6 +58,12 @@ class TestReadWrite:
         with pytest.raises(UnsupportedOperationError):
             ondio.object_count("http://files.example.com/")
 
+    def test_upload_unsupported(self, requests_mock, tmp_path):
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"x")
+        with pytest.raises(UnsupportedOperationError):
+            ondio.upload(URL, src)
+
 
 class TestReadRange:
     def test_read_range_honored(self, requests_mock):

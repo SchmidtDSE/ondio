@@ -1,5 +1,8 @@
 """S3 backend tests via moto, driven through the public API."""
 
+from pathlib import Path
+
+import numpy as np
 import pytest
 
 import ondio
@@ -29,6 +32,54 @@ class TestReadWrite:
         ondio.download(uri, dest)
         assert dest.read_bytes() == b"data"
 
+
+
+class TestUpload:
+    def test_upload_larger_than_one_multipart_chunk(self, prefix, tmp_path, monkeypatch):
+        # moto stores a multipart object's composite CRC32 without the "-N"
+        # suffix real S3 adds, so botocore would check it against the whole
+        # body and fail the read
+        monkeypatch.setenv("AWS_RESPONSE_CHECKSUM_VALIDATION", "when_required")
+        # 9 MiB is above boto3's 8 MiB multipart threshold
+        payload = np.random.default_rng(11).bytes(9 * 1024 * 1024)
+        src = tmp_path / "big.bin"
+        src.write_bytes(payload)
+        uri = f"{prefix}/big.bin"
+        ondio.upload(uri, src)
+        assert ondio.read(uri) == payload
+
+    def test_upload_does_not_read_whole_source_or_write(self, prefix, tmp_path, monkeypatch):
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"contents")
+
+        def refuse(*args, **kwargs):
+            raise AssertionError("upload went through an in-memory read or write")
+
+        monkeypatch.setattr(Path, "read_bytes", refuse)
+        monkeypatch.setattr("ondio.backends.aws.AwsBackend.write", refuse)
+        uri = f"{prefix}/src.bin"
+        ondio.upload(uri, src)
+        assert ondio.read(uri) == b"contents"
+
+    def test_upload_replaces_existing_object(self, prefix, tmp_path):
+        first, second = tmp_path / "first.bin", tmp_path / "second.bin"
+        first.write_bytes(b"first")
+        second.write_bytes(b"second")
+        uri = f"{prefix}/a.bin"
+        ondio.upload(uri, first)
+        ondio.upload(uri, second)
+        assert ondio.read(uri) == b"second"
+
+    def test_upload_to_missing_bucket_raises(self, tmp_path):
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"contents")
+        with pytest.raises(ObjectNotFoundError) as excinfo:
+            ondio.upload("s3://absent-bucket/a.bin", src)
+        assert excinfo.value.__cause__ is not None
+
+    def test_upload_missing_source_raises(self, prefix, tmp_path):
+        with pytest.raises(FileNotFoundError):
+            ondio.upload(f"{prefix}/a.bin", tmp_path / "absent.bin")
 
 class TestReadRange:
     def test_read_range_semantics(self, prefix):

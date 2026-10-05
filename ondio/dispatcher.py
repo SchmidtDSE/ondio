@@ -148,14 +148,22 @@ def read_json(uri: str, **kwargs: Any) -> Any:
 
 
 def upload(uri: str, source_path: str | os.PathLike[str], **kwargs: Any) -> None:
-    """Upload a local file to `uri`.
+    """Upload a local file to `uri`, streaming it from disk.
+
+    The file is sent without being read into memory. An existing object at
+    `uri` is replaced.
 
     Args:
         uri: Fully-qualified storage URI to write to.
         source_path: Local file to upload.
         **kwargs: Forwarded to the backend constructor.
+
+    Raises:
+        FileNotFoundError: If `source_path` is not an existing file.
     """
-    write(uri, Path(source_path).read_bytes(), **kwargs)
+    if not Path(source_path).is_file():
+        raise FileNotFoundError(f"no such file to upload: {source_path}")
+    get_backend(uri, **kwargs).upload(uri, source_path)
     printer.message(f"uploaded {source_path} to {uri}")
 
 

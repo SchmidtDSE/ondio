@@ -141,6 +141,23 @@ class StorageBackend(Protocol):
         """
         ...
 
+    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+        """Send a local file to a URI without reading it into memory.
+
+        An existing object at `uri` is replaced.
+
+        Args:
+            uri: Destination URI.
+            source_path: Local file to send.
+
+        Raises:
+            ObjectNotFoundError: If the destination's bucket does not exist.
+            AuthError: If access to the destination is denied.
+            UnsupportedOperationError: If the backend cannot write.
+            OndioError: For any other storage error, as `write` raises.
+        """
+        ...
+
     def list_files(
         self,
         uri_prefix: str,

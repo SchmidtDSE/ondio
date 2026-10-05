@@ -19,8 +19,9 @@ The API draws one distinction consistently:
   `bytes`; `write(uri, data)` takes them. Nothing touches the local filesystem.
 - **`download` / `upload`** move **files on disk**. `download(uri, out_path)`
   streams the object to a local path (creating parent directories);
-  `upload(uri, source_path)` pushes a local file to the URI. The URI always
-  comes first, the local path second.
+  `upload(uri, source_path)` streams a local file to the URI without reading
+  it into memory, replacing any existing object there. The URI always comes
+  first, the local path second.
 
 The format helpers follow the same rule: `read_flac` returns decoded samples or
 FLAC bytes in memory, while `download_flac` writes a local `.flac` file;
@@ -267,7 +268,7 @@ implement format-specific logic.
 | `write_json(uri, obj)` / `read_json(uri)` | JSON objects, serialized/parsed |
 | `download(uri, out_path)` | Download the object at `uri` to a local file |
 | `download_files(uris, local_dir)` | Download many objects into a directory, named by basename; returns local paths in input order |
-| `upload(uri, source_path)` | Upload a local file to `uri` |
+| `upload(uri, source_path)` | Stream a local file to `uri`, replacing any existing object |
 | `extract_flac_header(uri)` | Parse FLAC STREAMINFO, fetching only header bytes |
 | `read_flac(uri, start_sec, end_sec, decode=…)` | FLAC (whole or windowed) → PCM array or FLAC bytes |
 | `download_flac(uri, out_path, start_sec, end_sec)` | FLAC (whole or windowed) → local `.flac` file |

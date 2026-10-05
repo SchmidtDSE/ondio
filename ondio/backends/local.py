@@ -74,6 +74,14 @@ class LocalBackend:
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(src, dest)
 
+    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+        path = _to_path(uri)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source_path, path)
+        except OSError as exc:
+            raise _wrap_oserror(uri, exc)
+
     def list_files(
         self,
         uri_prefix: str,

@@ -21,6 +21,16 @@ def _split(uri: str) -> tuple[str, str]:
     return parsed.netloc, parsed.path.lstrip("/")
 
 
+def _from_client_error(exc, uri: str) -> OndioError:
+    """The ondio exception for a botocore ClientError, by its error code."""
+    code = exc.response.get("Error", {}).get("Code", "")
+    if code in _NOT_FOUND_CODES:
+        return ObjectNotFoundError(f"no such object: {uri}")
+    if code in _AUTH_CODES:
+        return AuthError(f"access denied ({code}): {uri}")
+    return OndioError(f"S3 error ({code}) for {uri}")
+
+
 class AwsBackend:
     """StorageBackend for AWS S3 (`s3://bucket/key` URIs), via boto3.
 
@@ -40,17 +50,19 @@ class AwsBackend:
 
     @contextlib.contextmanager
     def _translate(self, uri: str):
+        from boto3.exceptions import S3UploadFailedError
         from botocore.exceptions import ClientError
 
         try:
             yield
         except ClientError as exc:
-            code = exc.response.get("Error", {}).get("Code", "")
-            if code in _NOT_FOUND_CODES:
-                raise ObjectNotFoundError(f"no such object: {uri}") from exc
-            if code in _AUTH_CODES:
-                raise AuthError(f"access denied ({code}): {uri}") from exc
-            raise OndioError(f"S3 error ({code}) for {uri}") from exc
+            raise _from_client_error(exc, uri) from exc
+        except S3UploadFailedError as exc:
+            # upload_file raises this inside its `except ClientError` block
+            # without `from`, so the ClientError is only on __context__
+            if isinstance(exc.__context__, ClientError):
+                raise _from_client_error(exc.__context__, uri) from exc
+            raise OndioError(f"S3 upload failed for {uri}") from exc
 
     def read(self, uri: str) -> bytes:
         bucket, key = _split(uri)
@@ -90,6 +102,11 @@ class AwsBackend:
         dest.parent.mkdir(parents=True, exist_ok=True)
         with self._translate(uri):
             self._client.download_file(bucket, key, str(dest))
+
+    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+        bucket, key = _split(uri)
+        with self._translate(uri):
+            self._client.upload_file(str(source_path), bucket, key)
 
     def list_files(
         self,

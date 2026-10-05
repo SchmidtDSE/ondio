@@ -44,6 +44,10 @@ class FakeBlob:
     def upload_from_string(self, data, content_type=None):
         self._store[self.name] = bytes(data, "utf-8") if isinstance(data, str) else bytes(data)
 
+    def upload_from_filename(self, filename, content_type=None):
+        with open(filename, "rb") as f:
+            self._store[self.name] = f.read()
+
     def exists(self):
         return self.name in self._store
 
@@ -112,6 +116,16 @@ class TestReadWrite:
         dest = tmp_path / "sub" / "out.bin"
         backend.download(f"{PREFIX}/audio/chunk_001.flac", dest)
         assert dest.read_bytes() == b"one"
+
+    def test_upload_does_not_upload_from_string(self, backend, store, tmp_path, monkeypatch):
+        def refuse(*args, **kwargs):
+            raise AssertionError("upload went through upload_from_string")
+
+        monkeypatch.setattr(FakeBlob, "upload_from_string", refuse)
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"contents")
+        backend.upload(f"{PREFIX}/new/x.bin", src)
+        assert store["new/x.bin"] == b"contents"
 
 
 class TestReadRange:
@@ -239,3 +253,13 @@ class TestErrors:
         monkeypatch.setattr(FakeBlob, "download_as_bytes", deny)
         with pytest.raises(AuthError):
             backend.read(f"{PREFIX}/audio/chunk_001.flac")
+
+    def test_upload_auth_error_mapping(self, backend, monkeypatch, tmp_path):
+        def deny(*args, **kwargs):
+            raise gexc.Forbidden("nope")
+
+        monkeypatch.setattr(FakeBlob, "upload_from_filename", deny)
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"contents")
+        with pytest.raises(AuthError):
+            backend.upload(f"{PREFIX}/new/x.bin", src)
