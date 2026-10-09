@@ -1,0 +1,33 @@
+name: Tests
+
+# Runs the unit tests on each push to main and on each pull request.
+# Integration tests need real cloud access, so they do not run here.
+# Actions are pinned to commit SHAs; the comment names the release.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A new push to the same branch or pull request cancels the older run.
+concurrency:
+  group: tests-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: prefix-dev/setup-pixi@d3f436a425481402e6a95a1d1fc10331c708cd9e # v0.10.2
+        with:
+          pixi-version: v0.70.0
+          environments: test
+          locked: true
+
+      - run: pixi run -e test test-unit
