@@ -48,6 +48,12 @@ summary = ondio.read_json("s3://my-bucket/results/summary.json")
 ondio.download("gs://my-bucket/audio/rec.flac", "data/rec.flac")
 ondio.upload("s3://my-bucket/audio/rec.flac", "data/rec.flac")
 
+# create-only: refuses if an object exists; a reader never sees a partial object
+ondio.create("s3://my-bucket/runs/1/result.json", b"{}")   # ObjectExistsError if present
+
+# where a URI points: the store, and the path in it that ondio reads
+ondio.locate("s3://my-bucket/runs/1/out")   # Location(store='s3://my-bucket', path='runs/1/out')
+
 # many objects into one directory, named by basename; concurrent downloads,
 # returned local paths follow the input order
 local = ondio.download_files(uris, "results/", max_workers=8)
@@ -64,6 +70,13 @@ if ondio.exists("s3://my-bucket/tmp/scratch.json"):
 # (for s3:// that's boto3.Session — e.g. picking an AWS profile)
 ondio.list_files("s3://my-bucket/audio/", profile_name="dse")
 ```
+
+`create` works on S3 (a conditional `PUT` with `If-None-Match: *`) and on local disk
+(a temporary file linked into place). GCS and HTTP raise `UnsupportedOperationError`.
+They are refused before loading optional SDKs or initializing credentials.
+S3 transport failures raise `OndioError`, with the original exception as the cause.
+If `create` fails for any reason other than `ObjectExistsError`, the object may or may
+not exist; read it to find out.
 
 Listing prefixes have folder semantics on every backend: a path names the
 object at that exact location plus everything under it as a folder, never
@@ -280,49 +293,7 @@ implement format-specific logic.
 
 Each call resolves a backend from the URI scheme and delegates to it:
 
-```
-                              caller
-         "s3://…"   "gs://…"   "https://…"   "file://…"   "/path"
-                                 │
-                                 ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ dispatcher — the public, URI-first API                          │
-│                                                                 │
-│   bytes/objects:  read · write · download · upload              │
-│                   download_files · exists · delete              │
-│                   list_files · object_count                     │
-│   json/parquet:   write_json · read_json · write_parquet        │
-│   flac:           extract_flac_header · read_flac               │
-│                   download_flac                                 │
-└──────────────┬───────────────────────────────┬──────────────────┘
-               │ get_backend(uri)              │ passes (backend, uri)
-               ▼                               ▼
-┌──────────────────────────┐    ┌─────────────────────────────────┐
-│ registry                 │    │ format helpers                  │
-│                          │    │                                 │
-│   URI scheme → platform  │    │   flac.py     header parsing +  │
-│   → backend factory      │    │               partial reads     │
-│                          │    │                                 │
-│                          │    │   parquet.py  write_parquet     │
-│                          │    │               (pyarrow)         │
-└──────────────┬───────────┘    └───────────────┬─────────────────┘
-               │                    backend-agnostic: built on the protocol
-               │                                │
-               │                                │
-               ▼                                ▼
-┌─────────────────────────────────────────────────────────────────┐
-│ backends — the StorageBackend protocol                          │
-│                                                                 │
-│   read · read_range · size · write · download · list_files      │
-│   object_count · exists · delete                                │
-│                                                                 │
-│   ┌─────────┐   ┌───────────┐   ┌───────────┐   ┌─────────────┐ │
-│   │ local   │   │ aws (s3:) │   │ gcs (gs:) │   │ url (http:) │ │
-│   └────┬────┘   └─────┬─────┘   └─────┬─────┘   └──────┬──────┘ │
-└────────┼──────────────┼───────────────┼────────────────┼────────┘
-         ▼              ▼               ▼                ▼
-     filesystem       boto3     google-cloud-storage  requests
-```
+![ondio architecture: dispatcher, registry, format helpers and backends](docs/architecture.svg)
 
 - **dispatcher** — what callers import: every function takes a URI, infers the platform, and delegates. No platform types leak out.
 - **registry** — the strategy lookup: maps the URI scheme to a platform name and lazily constructs that platform's backend.
