@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 import ondio
-from ondio import ObjectExistsError, ObjectNotFoundError, OndioError
+from ondio import Location, ObjectExistsError, ObjectNotFoundError, OndioError
 from ondio.registry import get_backend
 
 
@@ -53,6 +53,14 @@ class TestReadWrite:
     def test_download_missing_raises(self, tmp_path):
         with pytest.raises(ObjectNotFoundError):
             ondio.download(str(tmp_path / "absent"), tmp_path / "out.bin")
+
+    def test_a_local_location_is_the_file_ondio_reads(self, tmp_path):
+        target = tmp_path / "out" / "a.bin"
+        target.parent.mkdir()
+        target.write_bytes(b"payload")
+        uri = target.as_uri().replace("/out/", "/%6fut/")
+        assert ondio.read(uri) == b"payload"
+        assert ondio.locate(uri) == Location("file://", str(target).removeprefix("/"))
 
 
 class TestReadRange:

@@ -282,3 +282,13 @@ class TestCreate:
             ondio.create(uri, b"x")
         assert type(raised.value) is OndioError
         assert raised.value.__cause__ is failure
+
+
+def test_an_s3_location_is_the_key_ondio_writes(prefix):
+    boto3 = pytest.importorskip("boto3")
+    uri = f"{prefix}/runs/%2e%2e/a.bin"
+    ondio.write(uri, b"payload")
+    store, key = ondio.locate(uri)
+    client = boto3.client("s3", region_name="us-east-1")
+    body = client.get_object(Bucket=store.removeprefix("s3://"), Key=key)["Body"].read()
+    assert body == b"payload"

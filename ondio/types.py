@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
+from typing import NamedTuple
 
 @dataclass(frozen=True)
 class FlacHeader:
@@ -46,4 +47,12 @@ class AuthError(OndioError):
     """The backend rejected the request for authentication/authorization reasons."""
 
 
+class Location(NamedTuple):
+    """Where a URI points: the store it is in, and the path in that store ondio reads.
 
+    `store` is `s3://<bucket>`, `gs://<bucket>`, or `file://` for the local disk.
+    `path` has no leading `/`. Two URIs with equal locations name the same object.
+    """
+
+    store: str
+    path: str
