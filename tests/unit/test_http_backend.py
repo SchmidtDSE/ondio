@@ -64,6 +64,10 @@ class TestReadWrite:
         with pytest.raises(UnsupportedOperationError):
             ondio.upload(URL, src)
 
+    def test_create_unsupported(self, requests_mock):
+        with pytest.raises(UnsupportedOperationError):
+            ondio.create(URL, b"x")
+
 
 class TestReadRange:
     def test_read_range_honored(self, requests_mock):

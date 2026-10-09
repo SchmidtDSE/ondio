@@ -19,8 +19,8 @@ import numpy as np
 
 from ondio import flac as _flac
 from ondio._log import printer
-from ondio.registry import get_backend
-from ondio.types import FlacHeader, OndioError
+from ondio.registry import detect_platform, get_backend
+from ondio.types import FlacHeader, OndioError, UnsupportedOperationError
 
 def read(uri: str, **kwargs: Any) -> bytes:
     """Read the full object at `uri` into memory.
@@ -121,6 +121,28 @@ def write(uri: str, data: bytes, **kwargs: Any) -> None:
         **kwargs: Forwarded to the backend constructor.
     """
     get_backend(uri, **kwargs).write(uri, data)
+
+
+def create(uri: str, data: bytes, **kwargs: Any) -> None:
+    """Write raw bytes to `uri` only if no object exists there.
+
+    A reader sees either no object or the complete one, never part of it. Supported
+    on S3 and local disk.
+
+    Args:
+        uri: Fully-qualified storage URI to write to.
+        data: The bytes to write.
+        **kwargs: Forwarded to the backend constructor.
+
+    Raises:
+        ObjectExistsError: If an object exists at `uri`. It is not changed.
+        UnsupportedOperationError: On GCS and HTTP, before backend setup.
+        OndioError: For any other failure. This does not prove that nothing was
+            written: read `uri` to find out.
+    """
+    if detect_platform(uri) in {"gcs", "url"}:
+        raise UnsupportedOperationError(f"create is not supported for {uri!r}")
+    get_backend(uri, **kwargs).create(uri, data)
 
 
 def write_json(uri: str, data: Any, **kwargs: Any) -> None:

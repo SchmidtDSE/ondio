@@ -1,11 +1,14 @@
 """Dispatcher-level tests exercised against the local backend."""
 
+import errno
+import os
+import threading
 from pathlib import Path
 
 import pytest
 
 import ondio
-from ondio import ObjectNotFoundError
+from ondio import ObjectExistsError, ObjectNotFoundError, OndioError
 from ondio.registry import get_backend
 
 
@@ -220,3 +223,81 @@ class TestJsonAndFiles:
         ondio.upload(str(dest), src)
         with open(dest, "rb") as f:  # read_bytes is patched out
             assert f.read() == b"contents"
+
+
+class TestCreate:
+    def test_create_writes_a_new_object(self, tmp_path):
+        uri = str(tmp_path / "nested" / "result.json")
+        ondio.create(uri, b"first")  # creates parents
+        assert ondio.read(uri) == b"first"
+
+    def test_create_accepts_a_file_uri(self, tmp_path):
+        path = tmp_path / "result.json"
+        ondio.create(path.as_uri(), b"first")
+        assert path.read_bytes() == b"first"
+
+    def test_create_refuses_an_existing_object_and_keeps_it(self, tmp_path):
+        uri = str(tmp_path / "result.json")
+        ondio.create(uri, b"first")
+        with pytest.raises(ObjectExistsError):
+            ondio.create(uri, b"second")
+        assert ondio.read(uri) == b"first"
+
+    def test_create_refuses_an_object_written_by_write(self, tmp_path):
+        uri = str(tmp_path / "result.json")
+        ondio.write(uri, b"first")
+        with pytest.raises(ObjectExistsError):
+            ondio.create(uri, b"second")
+
+    def test_the_target_appears_only_when_complete(self, tmp_path, monkeypatch):
+        # The file is written beside the target, then linked into place in one step.
+        uri = str(tmp_path / "result.json")
+        seen = {}
+        real_link = os.link
+
+        def watch_link(source, target):
+            seen["target_existed"] = Path(target).exists()
+            seen["source_bytes"] = Path(source).read_bytes()
+            real_link(source, target)
+
+        monkeypatch.setattr(os, "link", watch_link)
+        ondio.create(uri, b"payload")
+        assert seen == {"target_existed": False, "source_bytes": b"payload"}
+
+    def test_create_leaves_only_the_target(self, tmp_path):
+        uri = str(tmp_path / "result.json")
+        ondio.create(uri, b"first")
+        with pytest.raises(ObjectExistsError):
+            ondio.create(uri, b"second")
+        assert [p.name for p in tmp_path.iterdir()] == ["result.json"]
+
+    def test_a_failed_link_leaves_no_temporary_file(self, tmp_path, monkeypatch):
+        def no_hard_links(source, target):
+            raise OSError(errno.ENOTSUP, "hard links not supported")
+
+        monkeypatch.setattr(os, "link", no_hard_links)
+        with pytest.raises(OndioError) as raised:
+            ondio.create(str(tmp_path / "result.json"), b"x")
+        assert not isinstance(raised.value, ObjectExistsError)
+        assert list(tmp_path.iterdir()) == []
+
+    def test_one_of_several_racing_creates_wins(self, tmp_path):
+        uri = str(tmp_path / "result.json")
+        start = threading.Barrier(8)
+        winners, losers = [], []
+
+        def attempt(n):
+            start.wait()
+            try:
+                ondio.create(uri, f"writer {n}".encode())
+                winners.append(n)
+            except ObjectExistsError:
+                losers.append(n)
+
+        threads = [threading.Thread(target=attempt, args=(n,)) for n in range(8)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join()
+        assert len(winners) == 1 and len(losers) == 7
+        assert ondio.read(uri) == f"writer {winners[0]}".encode()

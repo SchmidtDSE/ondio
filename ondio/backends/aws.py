@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
-from ondio.types import AuthError, ObjectNotFoundError, OndioError
+from ondio.types import AuthError, ObjectExistsError, ObjectNotFoundError, OndioError
 
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NoSuchBucket"}
 _AUTH_CODES = {"403", "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken"}
@@ -95,6 +95,22 @@ class AwsBackend:
         bucket, key = _split(uri)
         with self._translate(uri):
             self._client.put_object(Bucket=bucket, Key=key, Body=data)
+
+    def create(self, uri: str, data: bytes) -> None:
+        # A conditional PUT: S3 refuses it with 412 if the key exists. A 409 means
+        # another conditional write was in progress, which proves nothing.
+        from botocore.exceptions import BotoCoreError, ClientError
+
+        bucket, key = _split(uri)
+        try:
+            self._client.put_object(Bucket=bucket, Key=key, Body=data, IfNoneMatch="*")
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "PreconditionFailed":
+                raise ObjectExistsError(f"object already exists: {uri}") from exc
+            raise _from_client_error(exc, uri) from exc
+        except BotoCoreError as exc:
+            # The request may have reached S3 even though no response arrived.
+            raise OndioError(f"could not confirm create for {uri}: {exc}") from exc
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         bucket, key = _split(uri)

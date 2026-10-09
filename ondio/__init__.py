@@ -5,6 +5,7 @@ call is dispatched to the matching backend. See PROJECT.md for the full design.
 """
 
 from ondio.dispatcher import (
+    create,
     delete,
     download,
     download_files,
@@ -25,6 +26,7 @@ from ondio.registry import detect_platform
 from ondio.types import (
     AuthError,
     FlacHeader,
+    ObjectExistsError,
     ObjectNotFoundError,
     OndioError,
     UnknownPlatformError,
@@ -34,10 +36,12 @@ from ondio.types import (
 __all__ = [
     "AuthError",
     "FlacHeader",
+    "ObjectExistsError",
     "ObjectNotFoundError",
     "OndioError",
     "UnknownPlatformError",
     "UnsupportedOperationError",
+    "create",
     "delete",
     "detect_platform",
     "download",

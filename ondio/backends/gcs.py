@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
-from ondio.types import AuthError, ObjectNotFoundError, OndioError
+from ondio.types import AuthError, ObjectNotFoundError, OndioError, UnsupportedOperationError
 
 
 def _split(uri: str) -> tuple[str, str]:
@@ -88,6 +88,9 @@ class GcsBackend:
     def write(self, uri: str, data: bytes) -> None:
         with self._translate(uri):
             self._blob(uri).upload_from_string(data, content_type="application/octet-stream")
+
+    def create(self, uri: str, data: bytes) -> None:
+        raise UnsupportedOperationError(f"create is not supported on GCS yet: {uri}")
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         dest = Path(out_path)

@@ -4,12 +4,13 @@ from __future__ import annotations
 
 import os
 import shutil 
+import tempfile
 
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 from ondio.backends.protocol import _matches_filters
-from ondio.types import AuthError, ObjectNotFoundError
+from ondio.types import AuthError, ObjectExistsError, ObjectNotFoundError, OndioError
 
 def _to_path(uri: str) -> Path:
     if uri.startswith("file://"):
@@ -64,6 +65,32 @@ class LocalBackend:
             path.write_bytes(data)
         except OSError as exc:
             raise _wrap_oserror(uri, exc)
+
+    def create(self, uri: str, data: bytes) -> None:
+        # The bytes go to a temporary file beside the target. os.link then puts it in
+        # place in one step, and fails if the target exists, so no reader sees a
+        # partial file and no existing file is replaced.
+        path = _to_path(uri)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            descriptor, temporary = tempfile.mkstemp(
+                dir=path.parent, prefix=f".{path.name}.", suffix=".partial"
+            )
+            try:
+                with os.fdopen(descriptor, "wb") as stream:
+                    stream.write(data)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                try:
+                    os.link(temporary, path)
+                except FileExistsError as exc:
+                    raise ObjectExistsError(f"object already exists: {uri}") from exc
+            finally:
+                os.unlink(temporary)
+        except PermissionError as exc:
+            raise AuthError(f"permission denied: {uri}") from exc
+        except OSError as exc:
+            raise OndioError(f"could not create {uri}: {exc}") from exc
 
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:

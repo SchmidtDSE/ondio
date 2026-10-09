@@ -109,6 +109,9 @@ class HttpBackend:
     def write(self, uri: str, data: bytes) -> None:
         raise UnsupportedOperationError(f"write is not supported over HTTP: {uri}")
 
+    def create(self, uri: str, data: bytes) -> None:
+        raise UnsupportedOperationError(f"create is not supported over HTTP: {uri}")
+
     def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
         raise UnsupportedOperationError(f"upload is not supported over HTTP: {uri}")
 

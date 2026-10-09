@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("google.cloud.storage")
 from google.api_core import exceptions as gexc  # noqa: E402
 
-from ondio import AuthError, ObjectNotFoundError  # noqa: E402
+from ondio import AuthError, ObjectNotFoundError, UnsupportedOperationError  # noqa: E402
 from ondio.backends.gcs import GcsBackend  # noqa: E402
 
 BUCKET = "testbkt"
@@ -263,3 +263,8 @@ class TestErrors:
         src.write_bytes(b"contents")
         with pytest.raises(AuthError):
             backend.upload(f"{PREFIX}/new/x.bin", src)
+
+
+def test_create_is_unsupported(backend):
+    with pytest.raises(UnsupportedOperationError):
+        backend.create(f"{PREFIX}/result.json", b"x")

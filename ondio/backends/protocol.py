@@ -129,6 +129,21 @@ class StorageBackend(Protocol):
         """
         ...
 
+    def create(self, uri: str, data: bytes) -> None:
+        """Write bytes to a URI only if no object exists there.
+
+        A reader sees either no object or the complete one. Backends that cannot
+        do this raise `UnsupportedOperationError`.
+
+        Args:
+            uri: Destination URI.
+            data: The bytes to write.
+
+        Raises:
+            ObjectExistsError: If an object exists at `uri`. It is not changed.
+        """
+        ...
+
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         """Stream an object to a local path, creating parent directories.
 

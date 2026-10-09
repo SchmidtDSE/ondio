@@ -6,7 +6,7 @@ import numpy as np
 import pytest
 
 import ondio
-from ondio import ObjectNotFoundError
+from ondio import ObjectExistsError, ObjectNotFoundError, OndioError
 from ondio.registry import get_backend
 
 
@@ -228,3 +228,57 @@ class TestJson:
         data = {"id": "rec-7", "tags": ["dawn"]}
         ondio.write_json(uri, data)
         assert ondio.read_json(uri) == data
+
+
+class TestCreate:
+    def test_create_writes_a_new_object(self, prefix):
+        ondio.create(f"{prefix}/runs/1/result.json", b"first")
+        assert ondio.read(f"{prefix}/runs/1/result.json") == b"first"
+
+    def test_create_refuses_an_existing_object_and_keeps_it(self, prefix):
+        uri = f"{prefix}/result.json"
+        ondio.create(uri, b"first")
+        with pytest.raises(ObjectExistsError):
+            ondio.create(uri, b"second")
+        assert ondio.read(uri) == b"first"
+
+    def test_a_conflicting_write_is_not_reported_as_existing(self, prefix, monkeypatch):
+        # S3 answers 409 when another conditional write to the key is in progress.
+        # That does not prove an object exists, so it is a plain OndioError.
+        from botocore.exceptions import ClientError
+
+        uri = f"{prefix}/result.json"
+        backend = get_backend(uri)
+
+        def conflict(**kwargs):
+            raise ClientError(
+                {
+                    "Error": {"Code": "ConditionalRequestConflict"},
+                    "ResponseMetadata": {"HTTPStatusCode": 409},
+                },
+                "PutObject",
+            )
+
+        monkeypatch.setattr(backend._client, "put_object", conflict)
+        with pytest.raises(OndioError) as raised:
+            backend.create(uri, b"x")
+        assert not isinstance(raised.value, ObjectExistsError)
+
+    @pytest.mark.parametrize("error_name", ["ReadTimeoutError", "EndpointConnectionError"])
+    def test_transport_failure_is_an_uncertain_write(self, prefix, monkeypatch, error_name):
+        from botocore import exceptions
+        import ondio.dispatcher as dispatcher
+
+        uri = f"{prefix}/result.json"
+        backend = get_backend(uri)
+        failure = getattr(exceptions, error_name)(endpoint_url="https://s3.example.invalid")
+
+        def fail(**kwargs):
+            raise failure
+
+        monkeypatch.setattr(backend._client, "put_object", fail)
+        monkeypatch.setattr(dispatcher, "get_backend", lambda uri, **kwargs: backend)
+        with pytest.raises(OndioError) as raised:
+            ondio.create(uri, b"x")
+        assert type(raised.value) is OndioError
+        assert raised.value.__cause__ is failure

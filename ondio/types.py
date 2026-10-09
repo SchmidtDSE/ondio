@@ -38,6 +38,10 @@ class ObjectNotFoundError(OndioError):
     """The object addressed by the URI does not exist."""
 
 
+class ObjectExistsError(OndioError):
+    """A create-only write found an object already at the URI. The object is unchanged."""
+
+
 class AuthError(OndioError):
     """The backend rejected the request for authentication/authorization reasons."""
 
