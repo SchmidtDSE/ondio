@@ -1,167 +1,61 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1360" height="1088" viewBox="0 0 1360 1088"
-     font-family="ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif">
-<!-- grid 8px · canvas 1360 × 1088 · pad 64 (content 64..1296)
-     CALLER     pills x=160 step 128 w=112 · y=164 h=28
-     DISPATCHER x=64 w=1232 · y=232 h=168 · cols 88 / 512 / 904
-     ROW 2      registry x=64 w=592 · helpers x=704 w=592 · y=464 h=192
-     BACKENDS   x=64 w=1232 · y=720 h=232 · classes x=88 step 300 w=284 · y=828 h=96
-     SDKS       w=200 centred on class boxes · y=984 h=32
-     arrows: dispatcher→row2 at x=208 / 840 · row2→backends at x=208 / 840
--->
-  <defs>
-    <marker id="ar" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6"
-            orient="auto-start-reverse" markerUnits="strokeWidth">
-      <path d="M0,0 L10,4 L0,8 Z" fill="#1f3d5c"/>
-    </marker>
-    <marker id="ar-mute" viewBox="0 0 10 8" refX="9" refY="4" markerWidth="7" markerHeight="6"
-            orient="auto-start-reverse" markerUnits="strokeWidth">
-      <path d="M0,0 L10,4 L0,8 Z" fill="#93a6bd"/>
-    </marker>
-  </defs>
-  <style>
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace; }
-    .eyebrow { font-size: 11.5px; font-weight: 700; letter-spacing: .09em; }
-    .h1 { font-size: 32px; font-weight: 700; fill: #14304a; }
-    .sub { font-size: 16px; fill: #7186a0; }
-    .slab { font-size: 20px; font-weight: 700; }
-    .b { font-size: 12.5px; fill: #4c6280; }
-    .s { font-size: 12.5px; fill: #7186a0; }
-    .m { font-size: 13.5px; fill: #14304a; }
-    .ct { font-size: 15px; font-weight: 600; }
-    text { white-space: pre; }
-  </style>
-
-  <rect width="1360" height="1088" fill="#f6f8fb"/>
-
-  <text x="64" y="52" class="eyebrow" style="fill:#7a5ec9">ONDIO — ARCHITECTURE</text>
-  <text x="64" y="92" class="h1">Every call resolves a backend from its URI.</text>
-  <text x="64" y="120" class="sub">Format logic sits above the storage protocol. Backends deal only in bytes and files, and translate their SDK's errors.</text>
-  <line x1="64" y1="136" x2="1296" y2="136" stroke="#dde5ef" stroke-width="1"/>
-
-  <!-- ── caller ─────────────────────────────────────────────────────────── -->
-  <text x="64" y="182" class="eyebrow" style="fill:#7186a0">CALLER</text>
-  <rect x="160" y="164" width="112" height="28" rx="14" fill="#ffffff" stroke="#dde5ef" stroke-width="1.5"/>
-  <text x="216" y="183" class="mono m" text-anchor="middle">s3://…</text>
-  <rect x="288" y="164" width="112" height="28" rx="14" fill="#ffffff" stroke="#dde5ef" stroke-width="1.5"/>
-  <text x="344" y="183" class="mono m" text-anchor="middle">gs://…</text>
-  <rect x="416" y="164" width="112" height="28" rx="14" fill="#ffffff" stroke="#dde5ef" stroke-width="1.5"/>
-  <text x="472" y="183" class="mono m" text-anchor="middle">https://…</text>
-  <rect x="544" y="164" width="112" height="28" rx="14" fill="#ffffff" stroke="#dde5ef" stroke-width="1.5"/>
-  <text x="600" y="183" class="mono m" text-anchor="middle">file://…</text>
-  <rect x="672" y="164" width="112" height="28" rx="14" fill="#ffffff" stroke="#dde5ef" stroke-width="1.5"/>
-  <text x="728" y="183" class="mono m" text-anchor="middle">/path</text>
-  <text x="808" y="183" class="s">a fully-qualified URI or a local path, always the first argument</text>
-
-  <path d="M472,192 L472,224" fill="none" stroke="#1f3d5c" stroke-width="2" marker-end="url(#ar)"/>
-
-  <!-- ── dispatcher ─────────────────────────────────────────────────────── -->
-  <rect x="64" y="232" width="1232" height="168" rx="12" fill="#f0ecfa" stroke="#7a5ec9" stroke-width="2"/>
-  <text x="88" y="264" class="slab mono" style="fill:#4a2e83">dispatcher</text>
-  <text x="1272" y="264" class="s" text-anchor="end">what callers import as ondio.* — the public, URI-first API</text>
-  <line x1="88" y1="280" x2="1272" y2="280" stroke="#cfc2ea" stroke-width="1"/>
-
-  <text x="88" y="304" class="eyebrow" style="fill:#4a2e83">BYTES &amp; FILES</text>
-  <text x="88" y="330" class="mono m">read · write · download · upload</text>
-  <text x="88" y="350" class="mono m">download_files · exists · delete</text>
-  <text x="88" y="370" class="mono m">list_files · object_count</text>
-
-  <text x="512" y="304" class="eyebrow" style="fill:#4a2e83">JSON &amp; PARQUET</text>
-  <text x="512" y="330" class="mono m">write_json · read_json</text>
-  <text x="512" y="350" class="mono m">write_parquet</text>
-  <text x="632" y="350" class="s">in ondio.parquet</text>
-
-  <text x="904" y="304" class="eyebrow" style="fill:#4a2e83">FLAC</text>
-  <text x="904" y="330" class="mono m">extract_flac_header</text>
-  <text x="904" y="350" class="mono m">read_flac · download_flac</text>
-
-  <path d="M208,400 L208,456" fill="none" stroke="#1f3d5c" stroke-width="2" marker-end="url(#ar)"/>
-  <text x="224" y="434" class="mono s">get_backend(uri)</text>
-  <path d="M840,400 L840,456" fill="none" stroke="#1f3d5c" stroke-width="2" marker-end="url(#ar)"/>
-  <text x="856" y="434" class="s">format-specific calls</text>
-
-  <!-- ── registry ───────────────────────────────────────────────────────── -->
-  <rect x="64" y="464" width="592" height="192" rx="12" fill="#e9f1fb" stroke="#337dd4" stroke-width="2"/>
-  <text x="88" y="496" class="slab mono" style="fill:#1f4e79">registry</text>
-  <text x="632" y="496" class="s" text-anchor="end">scheme → platform → backend</text>
-
-  <text x="88" y="532" class="mono m">s3://</text>
-  <text x="232" y="532" class="mono m" style="fill:#7186a0">→ aws</text>
-  <text x="328" y="532" class="mono m" style="fill:#1f4e79">AwsBackend</text>
-  <text x="88" y="554" class="mono m">gs://</text>
-  <text x="232" y="554" class="mono m" style="fill:#7186a0">→ gcs</text>
-  <text x="328" y="554" class="mono m" style="fill:#1f4e79">GcsBackend</text>
-  <text x="88" y="576" class="mono m">http(s)://</text>
-  <text x="232" y="576" class="mono m" style="fill:#7186a0">→ url</text>
-  <text x="328" y="576" class="mono m" style="fill:#1f4e79">HttpBackend</text>
-  <text x="88" y="598" class="mono m">file://, /path</text>
-  <text x="232" y="598" class="mono m" style="fill:#7186a0">→ local</text>
-  <text x="328" y="598" class="mono m" style="fill:#1f4e79">LocalBackend</text>
-
-  <line x1="88" y1="616" x2="632" y2="616" stroke="#b7d0ea" stroke-width="1"/>
-  <text x="88" y="640" class="b">Constructed lazily: an SDK is imported only when its scheme is used.</text>
-
-  <!-- ── format helpers ─────────────────────────────────────────────────── -->
-  <rect x="704" y="464" width="592" height="192" rx="12" fill="#eaf5ef" stroke="#3f9d6b" stroke-width="2"/>
-  <text x="728" y="496" class="slab" style="fill:#1f6b45">format helpers</text>
-  <text x="1272" y="496" class="s" text-anchor="end">the only place format logic lives</text>
-
-  <text x="728" y="532" class="mono m" style="fill:#1f6b45">flac.py</text>
-  <text x="848" y="532" class="b">STREAMINFO parsing, ranged partial reads,</text>
-  <text x="848" y="550" class="b">decoding through pydub and ffmpeg</text>
-  <text x="728" y="584" class="mono m" style="fill:#1f6b45">parquet.py</text>
-  <text x="848" y="584" class="b">pyarrow dataset in a temp folder, then one</text>
-  <text x="848" y="602" class="b">upload per file</text>
-
-  <line x1="728" y1="616" x2="1272" y2="616" stroke="#b6d8c4" stroke-width="1"/>
-  <text x="728" y="640" class="eyebrow" style="fill:#1f6b45">BACKEND-AGNOSTIC</text>
-  <text x="880" y="640" class="b" style="fill:#1f6b45">written once against the protocol</text>
-
-  <path d="M208,656 L208,712" fill="none" stroke="#1f3d5c" stroke-width="2" marker-end="url(#ar)"/>
-  <text x="224" y="690" class="s">constructs</text>
-  <path d="M840,656 L840,712" fill="none" stroke="#1f3d5c" stroke-width="2" marker-end="url(#ar)"/>
-  <text x="856" y="690" class="mono s">read · read_range · size</text>
-
-  <!-- ── backends ───────────────────────────────────────────────────────── -->
-  <rect x="64" y="720" width="1232" height="232" rx="12" fill="#e6f7f3" stroke="#14a48a" stroke-width="2.5"/>
-  <text x="88" y="752" class="slab mono" style="fill:#0b6e5c">backends</text>
-  <text x="1272" y="752" class="s" text-anchor="end">the StorageBackend protocol — bytes and files, never formats</text>
-  <text x="88" y="784" class="mono m">read · read_range · size · write · download · upload</text>
-  <text x="88" y="804" class="mono m">list_files · object_count · exists · delete</text>
-
-  <rect x="88" y="828" width="284" height="96" rx="10" fill="#ffffff" stroke="#14a48a" stroke-width="1.5"/>
-  <text x="108" y="858" class="ct mono" style="fill:#0b6e5c">LocalBackend</text>
-  <text x="108" y="880" class="s">local.py · file://, paths</text>
-  <text x="108" y="904" class="b">copies and reads files</text>
-
-  <rect x="388" y="828" width="284" height="96" rx="10" fill="#ffffff" stroke="#14a48a" stroke-width="1.5"/>
-  <text x="408" y="858" class="ct mono" style="fill:#0b6e5c">AwsBackend</text>
-  <text x="408" y="880" class="s">aws.py · s3://</text>
-  <text x="408" y="904" class="b">multipart transfers above 8 MiB</text>
-
-  <rect x="688" y="828" width="284" height="96" rx="10" fill="#ffffff" stroke="#14a48a" stroke-width="1.5"/>
-  <text x="708" y="858" class="ct mono" style="fill:#0b6e5c">GcsBackend</text>
-  <text x="708" y="880" class="s">gcs.py · gs:// · [gcs] extra</text>
-  <text x="708" y="904" class="b">resumable uploads above 8 MiB</text>
-
-  <rect x="988" y="828" width="284" height="96" rx="10" fill="#ffffff" stroke="#14a48a" stroke-width="1.5"/>
-  <text x="1008" y="858" class="ct mono" style="fill:#0b6e5c">HttpBackend</text>
-  <text x="1008" y="880" class="s">http.py · http(s):// · [http] extra</text>
-  <text x="1008" y="904" class="b" style="fill:#a83a33">read-only; writes and listing raise</text>
-
-  <!-- ── platform SDKs (context) ────────────────────────────────────────── -->
-  <path d="M230,924 L230,976" fill="none" stroke="#93a6bd" stroke-width="2" marker-end="url(#ar-mute)"/>
-  <path d="M530,924 L530,976" fill="none" stroke="#93a6bd" stroke-width="2" marker-end="url(#ar-mute)"/>
-  <path d="M830,924 L830,976" fill="none" stroke="#93a6bd" stroke-width="2" marker-end="url(#ar-mute)"/>
-  <path d="M1130,924 L1130,976" fill="none" stroke="#93a6bd" stroke-width="2" marker-end="url(#ar-mute)"/>
-
-  <rect x="130" y="984" width="200" height="32" rx="8" fill="#eef2f7" stroke="#93a6bd" stroke-width="1.5"/>
-  <text x="230" y="1005" class="mono m" style="fill:#4c6280" text-anchor="middle">filesystem</text>
-  <rect x="430" y="984" width="200" height="32" rx="8" fill="#eef2f7" stroke="#93a6bd" stroke-width="1.5"/>
-  <text x="530" y="1005" class="mono m" style="fill:#4c6280" text-anchor="middle">boto3</text>
-  <rect x="730" y="984" width="200" height="32" rx="8" fill="#eef2f7" stroke="#93a6bd" stroke-width="1.5"/>
-  <text x="830" y="1005" class="mono m" style="fill:#4c6280" text-anchor="middle">google-cloud-storage</text>
-  <rect x="1030" y="984" width="200" height="32" rx="8" fill="#eef2f7" stroke="#93a6bd" stroke-width="1.5"/>
-  <text x="1130" y="1005" class="mono m" style="fill:#4c6280" text-anchor="middle">requests</text>
-
-  <text x="64" y="1064" class="s">Every backend translates its SDK's errors into ObjectNotFoundError · AuthError · UnsupportedOperationError · OndioError.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="800" viewBox="0 0 1040 800" role="img" aria-labelledby="title desc">
+<title id="title">ondio architecture — detailed compact layers</title><desc id="desc">The URI-first dispatcher resolves storage through the registry and delegates format operations to FLAC and Parquet helpers. The backends share a byte and file protocol across S3, GCS, HTTP and local storage. create writes only if absent on S3 and local disk. locate resolves a URI to its store and path without storage I/O.</desc>
+<!-- 8px grid; margins 56; URI row y=56; dispatcher y=168..248; middle columns x=56,552 y=336..456; storage boundary y=536; backend columns x=56,296,536,776 y=664..744. -->
+<defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#61758a" stroke-width="1.2"/></marker></defs>
+<style>text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;fill:#14304a}.mono{font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace}.heading{font-family:Helvetica,Arial,sans-serif;font-size:24px;font-weight:600}</style>
+<rect width="1040" height="800" fill="#f6f8fb"/>
+<text x="104" y="56" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="middle" class="mono">s3://…</text>
+<path d="M104 72 V88" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<text x="296" y="56" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="middle" class="mono">gs://…</text>
+<path d="M296 72 V88" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<text x="520" y="56" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="middle" class="mono">http(s)://…</text>
+<path d="M520 72 V88" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<text x="744" y="56" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="middle" class="mono">file://…</text>
+<path d="M744 72 V88" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<text x="936" y="56" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="middle" class="mono">/path</text>
+<path d="M936 72 V88" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<path d="M104 88 H936 M520 88 V136" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="32" y="144" width="976" height="120" rx="6" fill="#f0ecfa" stroke="none"/>
+<rect x="32" y="144" width="4" height="120" rx="0" fill="#7a5ec9" stroke="none"/>
+<text x="56" y="176" style="fill:#4a2e83" text-anchor="start" class="heading">Dispatcher</text>
+<text x="984" y="172" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="end">URI-first API</text>
+<text x="56" y="212" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">read · write · create · download · upload</text>
+<text x="56" y="240" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start">JSON, FLAC &amp; object management</text>
+<path d="M280 264 V312" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M768 264 V312" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
+<rect x="32" y="320" width="480" height="176" rx="6" fill="#e9f1fb" stroke="none"/>
+<rect x="528" y="320" width="480" height="176" rx="6" fill="#eaf5ef" stroke="none"/>
+<text x="56" y="380" style="fill:#1f4e79" text-anchor="start" class="heading">Registry</text>
+<text x="56" y="416" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start">URI scheme → platform → backend</text>
+<text x="56" y="448" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">get_backend(uri) → backend</text>
+<text x="56" y="476" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">locate(uri) → store + path · no I/O</text>
+<text x="552" y="380" style="fill:#1f6b45" text-anchor="start" class="heading">Format helpers</text>
+<text x="552" y="416" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">flac.py</text>
+<text x="700" y="416" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start">Headers &amp; audio windows</text>
+<text x="552" y="448" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">parquet.py</text>
+<text x="700" y="448" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start">Partitioned datasets</text>
+<text x="552" y="476" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">Shared format logic across storage platforms</text>
+<path d="M280 496 V528" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M768 496 V528" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M56 536 H984" fill="none" stroke="#14a48a" stroke-width="1.5"/>
+<text x="56" y="572" style="fill:#0b6e5c" text-anchor="start" class="heading">StorageBackend</text>
+<text x="984" y="570" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="end">Bytes &amp; files</text>
+<text x="56" y="604" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">read · read_range · write · create · download · upload · list_files</text>
+<rect x="32" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="56" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">S3</text>
+<text x="56" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">AwsBackend</text>
+<text x="56" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">boto3</text>
+<rect x="272" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="296" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">GCS</text>
+<text x="296" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">GcsBackend</text>
+<text x="296" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">google-cloud-storage</text>
+<rect x="512" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="536" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">HTTP</text>
+<text x="536" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">HttpBackend</text>
+<text x="536" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">requests · read-only</text>
+<rect x="752" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="776" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">Local</text>
+<text x="776" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">LocalBackend</text>
+<text x="776" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">filesystem</text>
+<text x="984" y="240" font-size="15" text-anchor="end" style="fill:#61758a">create: only if absent · S3 &amp; local</text>
 </svg>
