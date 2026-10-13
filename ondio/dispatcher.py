@@ -3,7 +3,11 @@
 Every function accepts `**kwargs`, forwarded to the backend constructor (see
 [`get_backend`][ondio.registry.get_backend]) — not to the individual operation.
 URIs are fully qualified: `s3://…`, `gs://…`, `http(s)://…`, `file://…`, or a
-plain local path.
+plain local path. A `file:`, `s3://` or `gs://` URI with `?` or `#` is refused with
+`ValueError`, since the text after it would be dropped. A local file whose name has
+`?` or `#` is reached with `%3F` and `%23` in a `file://` URI, or with a plain local
+path, which is used as written. S3 and GCS keys are not decoded, so a key with `?`
+or `#` cannot be reached.
 """
 
 from __future__ import annotations

@@ -15,6 +15,9 @@ def _split(uri: str) -> tuple[str, str]:
     parsed = urlparse(uri)
     if parsed.scheme != "gs" or not parsed.netloc:
         raise ValueError(f"not a gs:// URI: {uri!r}")
+    # urlparse would drop the text after ? or #, so the key would not be the one given.
+    if "?" in uri or "#" in uri:
+        raise ValueError(f"gs:// URIs with a query or fragment are not supported: {uri!r}")
     return parsed.netloc, parsed.path.lstrip("/")
 
 

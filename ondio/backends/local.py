@@ -12,13 +12,23 @@ from urllib.parse import unquote, urlparse
 from ondio.backends.protocol import _matches_filters
 from ondio.types import AuthError, ObjectExistsError, ObjectNotFoundError, OndioError
 
+def _is_file_uri(uri: str) -> bool:
+    return urlparse(uri).scheme.lower() == "file"
+
+
 def _to_path(uri: str) -> Path:
-    if uri.startswith("file://"):
-        parsed = urlparse(uri)
-        if parsed.netloc not in ("", "localhost"):
-            raise ValueError(f"file:// URIs with a remote host are not supported: {uri!r}")
-        return Path(unquote(parsed.path))
-    return Path(uri)
+    if not _is_file_uri(uri):
+        return Path(uri)
+    # The forms below would be read as a different path: urlparse drops a query or
+    # fragment, and without `//` the rest of the URI is a relative path.
+    if not uri.lower().startswith("file://"):
+        raise ValueError(f"file: URIs must start with file://: {uri!r}")
+    if "?" in uri or "#" in uri:
+        raise ValueError(f"file:// URIs with a query or fragment are not supported: {uri!r}")
+    parsed = urlparse(uri)
+    if parsed.netloc not in ("", "localhost"):
+        raise ValueError(f"file:// URIs with a remote host are not supported: {uri!r}")
+    return Path(unquote(parsed.path))
 
 def _wrap_oserror(uri: str, exc: OSError) -> Exception:
     if isinstance(exc, PermissionError):
@@ -118,7 +128,7 @@ class LocalBackend:
         required_prefix: str | None = None,
         required_ext: str | None = None,
     ) -> list[str]:
-        as_file_uri = uri_prefix.startswith("file://")
+        as_file_uri = _is_file_uri(uri_prefix)
         matches = (
             p
             for p in self._iter_matches(uri_prefix, recursive=recursive)

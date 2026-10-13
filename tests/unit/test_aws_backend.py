@@ -292,3 +292,24 @@ def test_an_s3_location_is_the_key_ondio_writes(prefix):
     client = boto3.client("s3", region_name="us-east-1")
     body = client.get_object(Bucket=store.removeprefix("s3://"), Key=key)["Body"].read()
     assert body == b"payload"
+
+
+class TestRefusedUris:
+    @pytest.fixture(params=["?b", "#b", "?", "#"])
+    def uri(self, prefix, request):
+        return f"{prefix}/a{request.param}"
+
+    def test_read_refuses_a_query_or_fragment(self, prefix, uri):
+        ondio.write(f"{prefix}/a", b"payload")
+        with pytest.raises(ValueError):
+            ondio.read(uri)
+
+    @pytest.mark.parametrize("operation", [ondio.create, ondio.write])
+    def test_writes_refuse_a_query_or_fragment(self, prefix, uri, operation):
+        with pytest.raises(ValueError):
+            operation(uri, b"payload")
+        assert ondio.list_files(f"{prefix}/") == []
+
+    def test_an_encoded_question_mark_is_part_of_the_key(self, prefix):
+        ondio.write(f"{prefix}/a%3Fb", b"payload")
+        assert ondio.list_files(f"{prefix}/") == [f"{prefix}/a%3Fb"]

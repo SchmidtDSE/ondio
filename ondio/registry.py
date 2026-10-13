@@ -49,8 +49,9 @@ def locate(uri: str) -> Location:
     are used as written.
 
     Raises:
-        ValueError: For a relative local path, a `file://` URI with a remote host,
-            or an `s3://` or `gs://` URI with no bucket.
+        ValueError: For a relative local path, a `file:` URI that does not start
+            with `file://`, a `file://` URI with a remote host, an `s3://` or `gs://`
+            URI with no bucket, or a `file:`, `s3://` or `gs://` URI with `?` or `#`.
         UnsupportedOperationError: For an HTTP URL, which ondio cannot write.
         UnknownPlatformError: For an unknown scheme.
     """

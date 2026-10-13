@@ -268,3 +268,14 @@ class TestErrors:
 def test_create_is_unsupported(backend):
     with pytest.raises(UnsupportedOperationError):
         backend.create(f"{PREFIX}/result.json", b"x")
+
+
+@pytest.mark.parametrize("suffix", ["?b", "#b", "?", "#"])
+def test_a_query_or_fragment_is_refused(backend, store, suffix):
+    store["a"] = b"payload"
+    uri = f"{PREFIX}/a{suffix}"
+    with pytest.raises(ValueError):
+        backend.read(uri)
+    with pytest.raises(ValueError):
+        backend.write(uri, b"other")
+    assert store["a"] == b"payload"

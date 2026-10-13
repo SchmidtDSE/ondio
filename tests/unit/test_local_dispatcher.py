@@ -63,6 +63,53 @@ class TestReadWrite:
         assert ondio.locate(uri) == Location("file://", str(target).removeprefix("/"))
 
 
+
+class TestRefusedUris:
+    @pytest.fixture(params=["?x", "#x", "?", "#"])
+    def suffix(self, request):
+        return request.param
+
+    def test_read_refuses_a_query_or_fragment(self, tmp_path, suffix):
+        target = tmp_path / "out"
+        target.write_bytes(b"payload")
+        with pytest.raises(ValueError):
+            ondio.read(target.as_uri() + suffix)
+
+    @pytest.mark.parametrize("operation", [ondio.create, ondio.write])
+    def test_writes_refuse_a_query_or_fragment(self, tmp_path, suffix, operation):
+        with pytest.raises(ValueError):
+            operation((tmp_path / "out").as_uri() + suffix, b"payload")
+        assert list(tmp_path.iterdir()) == []
+
+    @pytest.mark.parametrize("scheme", ["file:", "FILE:"])
+    def test_a_file_uri_without_two_slashes_is_refused(self, tmp_path, monkeypatch, scheme):
+        monkeypatch.chdir(tmp_path)
+        uri = scheme + str(tmp_path / "out")
+        for operation in (ondio.read, ondio.locate):
+            with pytest.raises(ValueError):
+                operation(uri)
+        for operation in (ondio.create, ondio.write):
+            with pytest.raises(ValueError):
+                operation(uri, b"payload")
+        assert list(tmp_path.iterdir()) == []
+
+    def test_a_bare_path_keeps_question_mark_and_hash(self, tmp_path):
+        target = tmp_path / "a?b#c"
+        ondio.create(str(target), b"payload")
+        assert target.read_bytes() == b"payload"
+        assert ondio.read(str(target)) == b"payload"
+        assert ondio.locate(str(target)) == Location("file://", str(target).removeprefix("/"))
+
+    def test_an_encoded_question_mark_reaches_the_file(self, tmp_path):
+        target = tmp_path / "a?b"
+        target.write_bytes(b"payload")
+        assert ondio.read(target.as_uri()) == b"payload"
+
+    def test_an_uppercase_scheme_lists_file_uris(self, tree):
+        uri = "FILE://" + tree.as_uri().removeprefix("file://")
+        assert ondio.list_files(uri) == ondio.list_files(tree.as_uri())
+
+
 class TestReadRange:
     @pytest.fixture
     def uri(self, tmp_path):

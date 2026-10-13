@@ -18,6 +18,9 @@ def _split(uri: str) -> tuple[str, str]:
     parsed = urlparse(uri)
     if parsed.scheme != "s3" or not parsed.netloc:
         raise ValueError(f"not an s3:// URI: {uri!r}")
+    # urlparse would drop the text after ? or #, so the key would not be the one given.
+    if "?" in uri or "#" in uri:
+        raise ValueError(f"s3:// URIs with a query or fragment are not supported: {uri!r}")
     return parsed.netloc, parsed.path.lstrip("/")
 
 
