@@ -106,7 +106,8 @@ class GcsBackend:
         # A conditional upload: GCS refuses it with 412 if the object exists.
         import requests
         from google.api_core import exceptions as gexc
-        from google.auth.exceptions import TransportError
+        from google.auth.exceptions import RefreshError, TransportError
+        from google.cloud.storage.exceptions import DataCorruption
 
         with self._translate(uri):
             try:
@@ -117,9 +118,14 @@ class GcsBackend:
                 # must be caught before _translate sees it: it subclasses
                 # GoogleAPICallError and would become a plain OndioError
                 raise ObjectExistsError(f"object already exists: {uri}") from exc
+            except RefreshError as exc:
+                raise AuthError(f"could not refresh GCS credentials: {uri}") from exc
             except (TransportError, requests.exceptions.RequestException, gexc.RetryError) as exc:
                 # The request may have reached GCS even though no response arrived.
                 raise OndioError(f"could not confirm create for {uri}: {exc}") from exc
+            except DataCorruption as exc:
+                # The client tries to delete the object before it raises this.
+                raise OndioError(f"GCS checksum mismatch for {uri}") from exc
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         dest = Path(out_path)

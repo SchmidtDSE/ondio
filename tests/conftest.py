@@ -44,6 +44,8 @@ def _aws_safety(monkeypatch, tmp_path):
     ):
         monkeypatch.delenv(var, raising=False)
     monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "no-aws-config"))
+    # botocore also reads profile settings, endpoint_url among them, from this file.
+    monkeypatch.setenv("AWS_SHARED_CREDENTIALS_FILE", str(tmp_path / "no-aws-credentials"))
 
 
 @pytest.fixture

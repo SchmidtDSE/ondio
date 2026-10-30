@@ -7,6 +7,7 @@ import pytest
 
 pytest.importorskip("google.cloud.storage")
 import google.auth.exceptions  # noqa: E402
+import google.cloud.storage.exceptions  # noqa: E402
 import requests  # noqa: E402
 from google.api_core import exceptions as gexc  # noqa: E402
 
@@ -294,6 +295,8 @@ class TestCreate:
             gexc.RetryError("deadline exceeded", cause=None),
             google.auth.exceptions.TransportError("connection reset"),
             requests.exceptions.ConnectionError("connection reset"),
+            # a resumable upload (over 8 MiB) whose checksum does not match
+            google.cloud.storage.exceptions.DataCorruption(None, "checksum mismatch"),
         ],
     )
     def test_a_failure_is_not_reported_as_existing(self, backend, monkeypatch, failure):
@@ -304,6 +307,17 @@ class TestCreate:
         with pytest.raises(OndioError) as raised:
             backend.create(f"{PREFIX}/result.json", b"x")
         assert type(raised.value) is OndioError
+        assert raised.value.__cause__ is failure
+
+    def test_expired_credentials_are_an_auth_error(self, backend, monkeypatch):
+        failure = google.auth.exceptions.RefreshError("token expired")
+
+        def fail(*args, **kwargs):
+            raise failure
+
+        monkeypatch.setattr(FakeBlob, "upload_from_string", fail)
+        with pytest.raises(AuthError) as raised:
+            backend.create(f"{PREFIX}/result.json", b"x")
         assert raised.value.__cause__ is failure
 
 

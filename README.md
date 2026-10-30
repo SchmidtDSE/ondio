@@ -71,12 +71,14 @@ if ondio.exists("s3://my-bucket/tmp/scratch.json"):
 ondio.list_files("s3://my-bucket/audio/", profile_name="dse")
 ```
 
-`create` works on S3 (a conditional `PUT` with `If-None-Match: *`) and on local disk
-(a temporary file linked into place). GCS and HTTP raise `UnsupportedOperationError`.
-They are refused before loading optional SDKs or initializing credentials.
-S3 transport failures raise `OndioError`, with the original exception as the cause.
-If `create` fails for any reason other than `ObjectExistsError`, the object may or may
-not exist; read it to find out.
+`create` works on S3 (a conditional `PUT` with `If-None-Match: *`), on GCS (a
+conditional upload with `if_generation_match=0`), and on local disk (a temporary file
+linked into place). HTTP raises `UnsupportedOperationError`, before loading optional
+SDKs or initializing credentials. S3 and GCS transport failures raise `OndioError`,
+with the original exception as the cause. If `create` fails for any reason other than
+`ObjectExistsError`, the object may or may not exist; read it to find out. On S3 and
+GCS, `ObjectExistsError` can name an object that the same call wrote, when the client
+retried after a lost response; compare the bytes if you need to know who wrote it.
 
 Listing prefixes have folder semantics on every backend: a path names the
 object at that exact location plus everything under it as a folder, never
@@ -96,6 +98,24 @@ ondio.list_files("s3://my-bucket/results/run-1/")  # only run-1/… — never th
 `object_count(prefix)` always equals `len(list_files(prefix))` given the same
 filters, on every backend — folder placeholder objects (the empty `dir/` keys
 some consoles create) are counted by neither.
+
+### Endpoints
+
+`endpoint_url=` sets the S3 or GCS endpoint, for example an S3 store that is not
+AWS. To make another process (a worker, a batch job) use the same endpoint,
+`get_environment` gives the environment variables to set there; that process then
+calls ondio with no options:
+
+```python
+ondio.read("s3://my-bucket/runs/1/out", endpoint_url="http://127.0.0.1:9000")
+env = ondio.get_environment("s3://my-bucket/runs/1", endpoint_url="http://127.0.0.1:9000")
+# {"AWS_ENDPOINT_URL_S3": "http://127.0.0.1:9000"}: add it to the worker's environment
+```
+
+An option that no variable carries (`profile_name`, `region_name`, or `endpoint_url`
+on GCS) raises `UnsupportedOperationError`, rather than being dropped. The other
+process must not set `AWS_IGNORE_CONFIGURED_ENDPOINT_URLS`, which makes S3 ignore the
+endpoint variable.
 
 ## FLAC
 
