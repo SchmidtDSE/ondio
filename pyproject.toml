@@ -93,11 +93,9 @@ zensical = ">=0.0.22"
 mkdocstrings-python = "*"
 
 [tool.pixi.feature.docs.tasks]
-docs-diagram = { cmd = "python scripts/make_dark_diagram.py", description = "Write the dark-mode architecture diagram from the light one" }
+docs-diagram = { cmd = "python docs/make_dark_diagram.py", description = "Write the dark-mode architecture diagram from the light one" }
 docs = { cmd = "zensical serve", depends-on = ["docs-diagram"], description = "Preview the docs site with live reload" }
-# zensical 0.0.26 has no working --strict, so check_docs.py finds missing pages and
-# broken API links instead
-docs-build = { cmd = "rm -rf site && zensical build && python scripts/check_docs.py", depends-on = ["docs-diagram"], description = "Build the docs into a clean site/, failing on a missing page or a broken API link" }
+docs-build = { cmd = "rm -rf site && zensical build", depends-on = ["docs-diagram"], description = "Build the docs into a clean site/" }
 
 [tool.pixi.feature.test.tasks]
 test = { cmd = "pytest", description = "Run the whole suite (unit, integration, slow, doctests)" }

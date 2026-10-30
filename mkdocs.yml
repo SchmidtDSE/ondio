@@ -4,7 +4,7 @@ site_url: https://schmidtdse.github.io/ondio/
 site_description: Uniform IO of audio data and bioacoustic model results across S3, GCS, HTTP, and local filesystems
 repo_url: https://github.com/SchmidtDSE/ondio
 repo_name: SchmidtDSE/ondio
-docs_dir: docs
+docs_dir: docs/content
 site_dir: site
 
 theme:

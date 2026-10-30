@@ -26,7 +26,7 @@ import ondio  # noqa: E402
 import ondio.backends.gcs  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[2]
-PAGES = [ROOT / "README.md", *sorted((ROOT / "docs").rglob("*.md"))]
+PAGES = [ROOT / "README.md", *sorted((ROOT / "docs" / "content").rglob("*.md"))]
 BLOCK = re.compile(r"(<!-- docs-test: skip[^>]*-->\n)?```python\n(.*?)```", re.S)
 
 
