@@ -1,4 +1,4 @@
-"""The StorageBackend Protocol: byte-level primitives every platform implements.
+"""The `StorageBackend` Protocol: byte-level primitives every platform implements.
 
 Format-specific logic (FLAC parsing, JSON/parquet helpers) lives above this layer,
 in the dispatcher and file-format specific modules — backends deal only in bytes and objects.
@@ -63,7 +63,7 @@ def _exact_object_matches(
 class StorageBackend(Protocol):
     """Byte-level storage primitives, implemented once per platform.
 
-    Implementations translate their platform SDK's errors into ondio's
+    Implementations translate their platform SDK's errors into `ondio`'s
     exception hierarchy (`ObjectNotFoundError`, `AuthError`,
     `UnsupportedOperationError`, `OndioError`). All URIs are fully qualified
     and addressable by the backend they are passed to.
@@ -91,7 +91,7 @@ class StorageBackend(Protocol):
         Args:
             uri: URI of the object.
             start_byte: First byte to read (>= 0).
-            end_byte: Last byte to read (inclusive); None means "to EOF".
+            end_byte: Last byte to read (inclusive); `None` means "to EOF".
 
         Returns:
             The requested bytes. Ranges extending past EOF return the
@@ -112,8 +112,8 @@ class StorageBackend(Protocol):
             uri: URI of the object.
 
         Returns:
-            The size in bytes (S3 HeadObject, GCS blob metadata, HTTP HEAD
-            Content-Length, local stat).
+            The size in bytes (S3 `HeadObject`, GCS blob metadata, HTTP `HEAD`
+            `Content-Length`, local stat).
 
         Raises:
             ObjectNotFoundError: If the object does not exist.
@@ -187,14 +187,14 @@ class StorageBackend(Protocol):
         The prefix has folder semantics on every backend: it matches the
         object at that exact path (if one exists) and every object under it
         as a folder, but never sibling objects that merely share leading
-        characters — "results/run-1" matches "results/run-1" and
-        "results/run-1/x" but not "results/run-10/x".
+        characters — `results/run-1` matches `results/run-1` and
+        `results/run-1/x` but not `results/run-10/x`.
 
         Args:
             uri_prefix: Prefix to list under.
-            recursive: If False, list only the immediate level.
+            recursive: If `False`, list only the immediate level.
             max_items: Cap on the number of results, applied after the
-                filename filters; None means unbounded.
+                filename filters; `None` means unbounded.
             required_prefix: If given, list only objects whose *filename*
                 starts with this.
             required_ext: If given, list only objects with this file
@@ -237,7 +237,7 @@ class StorageBackend(Protocol):
             uri: URI to check.
 
         Returns:
-            True if the object exists (not a directory/prefix).
+            `True` if the object exists (not a directory/prefix).
         """
         ...
 

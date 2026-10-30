@@ -1,4 +1,4 @@
-# Migrating from soundhub_utils
+# Migrating from `soundhub_utils`
 
 `ondio` is not a drop-in port. This table maps each `soundhub_utils.io` call to
 its replacement; the sections after it explain the differences, which are
@@ -7,7 +7,7 @@ implementations side by side on synthetic fixtures and on real field recordings.
 
 ## Calls
 
-| soundhub_utils | ondio |
+| `soundhub_utils` | `ondio` |
 | --- | --- |
 | `io.read(src)` (a platform response object) | `ondio.read(uri)` (`bytes`) |
 | `io.read(src, dest)` | `ondio.download(uri, out_path)` |
@@ -32,16 +32,16 @@ implementations side by side on synthetic fixtures and on real field recordings.
   applied consistently. Legacy's `io.read_flac(src, dest, ...)` actually wrote
   a file to disk; its counterpart here is `download_flac(uri, out_path, ...)`.
 - Failures raise typed exceptions (`OndioError`, `ObjectNotFoundError`,
-  `AuthError`, ...) instead of only being logged: logging (via cocina's
-  `Printer`, as in soundhub_utils) narrates progress and decisions, but is
+  `AuthError`, ...) instead of only being logged: logging (via `cocina`'s
+  `Printer`, as in `soundhub_utils`) narrates progress and decisions, but is
   never the sole signal that something went wrong.
 - `download_files` raises `ValueError` upfront when two URIs share a basename
   (they would overwrite each other in the destination directory); legacy
   silently clobbered. It also downloads concurrently and dispatches each URI
   independently, so schemes may be mixed in one call.
 - There is no per-call `printer=` argument (call kwargs are reserved for
-  backend configuration). Narration goes to cocina's process-wide `Printer`
-  singleton when cocina is installed, and is a silent no-op otherwise. To
+  backend configuration). Narration goes to `cocina`'s process-wide `Printer`
+  singleton when `cocina` is installed, and is a silent no-op otherwise. To
   route it to your own printer-like object instead (anything with
   `.message`, `.error`, ...), call `ondio.set_printer(obj)` once at startup;
   `ondio.set_printer(None)` restores the default.
@@ -69,7 +69,7 @@ implementations side by side on synthetic fixtures and on real field recordings.
   milliseconds (truncating, so float artifacts like `1.4 - 0.4 == 0.9999…`
   cost it a further millisecond); `ondio` cuts `[round(start_sec * sr),
   round(end_sec * sr))` on every path.
-- **No ffmpeg.** Decoding and encoding use soundfile, whose wheels bundle
+- **No ffmpeg.** Decoding and encoding use `soundfile`, whose wheels bundle
   libsndfile. A whole-file decode of a truncated or unknown-length stream now
   raises `OndioError`; ffmpeg used to return the decodable part. A windowed
   re-encode (`decode=False` or `download_flac`) of a 12- or 20-bit source

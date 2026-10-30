@@ -1,8 +1,8 @@
-"""Write docs/content/architecture-dark.svg, the dark-mode copy of architecture.svg.
+"""Write the dark-mode copy of each docs diagram, as <name>-dark.svg next to it.
 
-Edit only the light diagram. This script swaps each of its colors for a dark-mode
-one, and stops if the light diagram uses a color that has no swap here, so that a
-new color cannot slip into the dark diagram unchanged. The docs tasks run it
+Edit only the light diagrams. This script swaps each of their colors for a dark-mode
+one, and stops if a light diagram uses a color that has no swap here, so that a
+new color cannot slip into a dark diagram unchanged. The docs tasks run it
 before every build.
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 # Next to this script, not in content/: zensical publishes every file there.
 CONTENT = Path(__file__).parent / "content"
-LIGHT, DARK = CONTENT / "architecture.svg", CONTENT / "architecture-dark.svg"
+LIGHTS = [CONTENT / "architecture.svg", CONTENT / "flac-format.svg"]
 
 # light color -> dark color, grouped by what the color is for
 SWAPS = {
@@ -39,8 +39,10 @@ SWAPS = {
 
 COLOR = re.compile(r"#[0-9a-fA-F]{6}\b")
 
-light = LIGHT.read_text(encoding="utf-8")
-unknown = sorted({c.lower() for c in COLOR.findall(light)} - SWAPS.keys())
-if unknown:
-    sys.exit(f"{LIGHT} uses colors with no dark swap in {__file__}: {', '.join(unknown)}")
-DARK.write_text(COLOR.sub(lambda m: SWAPS[m.group().lower()], light), encoding="utf-8")
+for path in LIGHTS:
+    light = path.read_text(encoding="utf-8")
+    unknown = sorted({c.lower() for c in COLOR.findall(light)} - SWAPS.keys())
+    if unknown:
+        sys.exit(f"{path} uses colors with no dark swap in {__file__}: {', '.join(unknown)}")
+    dark = path.with_name(f"{path.stem}-dark.svg")
+    dark.write_text(COLOR.sub(lambda m: SWAPS[m.group().lower()], light), encoding="utf-8")

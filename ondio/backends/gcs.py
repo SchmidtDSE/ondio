@@ -22,16 +22,16 @@ def _split(uri: str) -> tuple[str, str]:
 
 
 class GcsBackend:
-    """StorageBackend for Google Cloud Storage (`gs://bucket/key` URIs).
+    """`StorageBackend` for Google Cloud Storage (`gs://bucket/key` URIs).
 
     See [`StorageBackend`][ondio.backends.StorageBackend] for method
     semantics. Requires the `gcs` extra. Credentials resolve through the
-    google-cloud-storage client's native chain; API errors are translated
-    into ondio's exception types.
+    `google-cloud-storage` client's native chain; API errors are translated
+    into `ondio`'s exception types.
 
     Args:
         endpoint_url: The GCS API endpoint. The client still uses its normal
-            credentials. None uses the client's own choice.
+            credentials. `None` uses the client's own choice.
         **client_kwargs: Forwarded to `google.cloud.storage.Client`
             (e.g. `project`).
 

@@ -1,35 +1,36 @@
-"""FLAC header parsing and soundfile-based reads.
+"""FLAC header parsing and `soundfile`-based reads.
 
 Public surface (each mirrored URI-first in the dispatcher):
 
-* extract_flac_header — parse STREAMINFO fetching only header bytes;
-* read_flac — the whole stream or a [start_sec, end_sec] window, in memory:
-  decoded PCM as a soundfile-style numpy array (default), or with
-  decode=False the bytes of a standalone FLAC file;
-* download_flac — the same window semantics, written to a local .flac path
-  (the counterpart of legacy soundhub_utils io.read_flac(src, dest, ...)).
+* `extract_flac_header` — parse STREAMINFO fetching only header bytes;
+* `read_flac` — the whole stream or a `[start_sec, end_sec]` window, in
+  memory: decoded PCM as a `soundfile`-style numpy array (default), or with
+  `decode=False` the bytes of a standalone FLAC file;
+* `download_flac` — the same window semantics, written to a local `.flac`
+  path (the counterpart of legacy `soundhub_utils`
+  `io.read_flac(src, dest, ...)`).
 
-Calls that need no decoding — read_flac(decode=False) or download_flac with
-no window — are plain byte copies and preserve the original file bytes
-exactly. Everything else decodes with soundfile (libsndfile, bundled in its
+Calls that need no decoding — `read_flac(decode=False)` or `download_flac`
+with no window — are plain byte copies and preserve the original file bytes
+exactly. Everything else decodes with `soundfile` (libsndfile, bundled in its
 wheel; nothing shells out). Windows are cut by sample index —
-[round(start_sec * sr), round(end_sec * sr)) — and a windowed FLAC result is a
-fresh encode: losslessly identical PCM, but not byte-identical to any slice of
-the source (new frame boundaries, new STREAMINFO, no original tags).
+`[round(start_sec * sr), round(end_sec * sr))` — and a windowed FLAC result
+is a fresh encode: losslessly identical PCM, but not byte-identical to any
+slice of the source (new frame boundaries, new STREAMINFO, no original tags).
 
-Damaged input raises OndioError. A window that reaches into a corrupt or
+Damaged input raises `OndioError`. A window that reaches into a corrupt or
 truncated region raises; it never returns short or substitute audio. A
 whole-file decode of a truncated or unknown-length stream also raises.
 
-What changed versus soundhub_utils:
+What changed versus `soundhub_utils`:
 
-* the STREAMINFO bit arithmetic is fixed — legacy read bits_per_sample from
-  the wrong bits (reporting e.g. 17 for a 16-bit file) and read the channel
-  count from total-samples bits (reporting 1 for nearly any file);
-* backend-agnostic: every function takes (backend, uri) and works on any
-  StorageBackend;
-* the four legacy entry points collapse to read_flac/download_flac, with the
-  window optional and the fetch strategy overridable via use_range;
+* the STREAMINFO bit arithmetic is fixed — legacy read `bits_per_sample`
+  from the wrong bits (reporting e.g. 17 for a 16-bit file) and read the
+  channel count from total-samples bits (reporting 1 for nearly any file);
+* backend-agnostic: every function takes `(backend, uri)` and works on any
+  `StorageBackend`;
+* the four legacy entry points collapse to `read_flac`/`download_flac`, with
+  the window optional and the fetch strategy overridable via `use_range`;
 * windows are sample-exact; legacy sliced at integer milliseconds.
 """
 
@@ -92,7 +93,7 @@ def extract_flac_header(backend: StorageBackend, uri: str) -> FlacHeader:
         bits 40-36  bits-per-sample - 1        (5 bits)
         bits 35-0   total samples in stream   (36 bits; 0 = unknown)
 
-    (This is the fix over soundhub_utils, which read bits_per_sample from
+    (This is the fix over `soundhub_utils`, which read `bits_per_sample` from
     bits 36-32 plus a stray total-samples bit, and channels from bits 35-33 —
     total-samples bits — instead of 43-41.)
 
@@ -502,25 +503,25 @@ def read_flac(
     Args:
         backend: The storage backend to fetch through.
         uri: URI of a FLAC file, addressable by `backend`.
-        start_sec: Window start in seconds; None means from the beginning.
-        end_sec: Window end in seconds; None means to the end of the stream
+        start_sec: Window start in seconds; `None` means from the beginning.
+        end_sec: Window end in seconds; `None` means to the end of the stream
             (values past EOF are clamped, like Python slices).
-        decode: If True (default), return decoded PCM; if False, return the
+        decode: If `True` (default), return decoded PCM; if `False`, return the
             bytes of a standalone FLAC file — the original bytes exactly when
             no window is given (a plain read), a fresh lossless encode of
             the slice otherwise.
         padding_ratio: Deprecated and ignored: ranged reads are
-            sample-exact. A value other than 0.25 emits a
+            sample-exact. A value other than `0.25` emits a
             `DeprecationWarning`; the argument will be removed in 0.4.
-        use_range: Fetch strategy. None (default) picks per the legacy
+        use_range: Fetch strategy. `None` (default) picks per the legacy
             heuristic: ranged download for files > 50 MB when the window is
-            < 1/3 of the stream, full download otherwise. True/False forces
+            < 1/3 of the stream, full download otherwise. `True`/`False` forces
             one path. Both are sample-exact.
 
     Returns:
         With `decode=True`, `(samples, sample_rate)` where `samples` is a
-        float32 array of shape `(frames, channels)` normalized to `[-1, 1]`
-        like libsndfile/soundfile. With `decode=False`, FLAC bytes.
+        `float32` array of shape `(frames, channels)` normalized to `[-1, 1]`
+        like libsndfile/`soundfile`. With `decode=False`, FLAC bytes.
 
     Raises:
         ValueError: If the window is empty, negative, starts past EOF, or
@@ -565,7 +566,7 @@ def download_flac(
     padding_ratio: float = 0.25,
     use_range: bool | None = None,
 ) -> None:
-    """Write a .flac file containing `[start_sec, end_sec]` of `uri` to `out_path`.
+    """Write a `.flac` file containing `[start_sec, end_sec]` of `uri` to `out_path`.
 
     With no window this is a byte-for-byte download of the original file.
     With one, the window is decoded, cut by sample index, and re-encoded —
@@ -573,14 +574,14 @@ def download_flac(
     and fetch semantics, and the ranged-path note, are as in
     [`read_flac`][ondio.flac.read_flac].
 
-    (Counterpart of legacy soundhub_utils `io.read_flac(src, dest, ...)`.)
+    (Counterpart of legacy `soundhub_utils` `io.read_flac(src, dest, ...)`.)
 
     Args:
         backend: The storage backend to fetch through.
         uri: URI of a FLAC file, addressable by `backend`.
         out_path: Local `.flac` destination path; parent directories are created.
-        start_sec: Window start in seconds; None means from the beginning.
-        end_sec: Window end in seconds; None means to the end of the stream.
+        start_sec: Window start in seconds; `None` means from the beginning.
+        end_sec: Window end in seconds; `None` means to the end of the stream.
         padding_ratio: As in [`read_flac`][ondio.flac.read_flac].
         use_range: As in [`read_flac`][ondio.flac.read_flac].
 

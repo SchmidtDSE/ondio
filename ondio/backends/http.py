@@ -1,7 +1,7 @@
 """HTTP/HTTPS backend (read-only).
 
 Write and listing operations are infeasible over plain HTTP and raise
-UnsupportedOperationError. read_range verifies the server honored the Range
+`UnsupportedOperationError`. `read_range` verifies the server honored the `Range`
 header (206) and refuses to pass off a full-body 200 as a range.
 """
 
@@ -17,7 +17,7 @@ _CHUNK = 1024 * 1024
 
 
 class HttpBackend:
-    """Read-only StorageBackend for plain `http(s)://` URLs, via requests.
+    """Read-only `StorageBackend` for plain `http(s)://` URLs, via `requests`.
 
     See [`StorageBackend`][ondio.backends.StorageBackend] for method
     semantics. Requires the `http` extra. `upload`, `list_files`,

@@ -42,7 +42,7 @@ def detect_platform(uri: str) -> str:
 
 
 def locate(uri: str) -> Location:
-    """The store `uri` is in, and the path in that store that ondio reads.
+    """The store `uri` is in, and the path in that store that `ondio` reads.
 
     It uses the same parsing as reads and writes, so it does not touch storage.
     Local `file:` paths are percent-decoded, as reads decode them; S3 and GCS keys
@@ -52,7 +52,7 @@ def locate(uri: str) -> Location:
         ValueError: For a relative local path, a `file:` URI that does not start
             with `file://`, a `file://` URI with a remote host, an `s3://` or `gs://`
             URI with no bucket, or a `file:`, `s3://` or `gs://` URI with `?` or `#`.
-        UnsupportedOperationError: For an HTTP URL, which ondio cannot write.
+        UnsupportedOperationError: For an HTTP URL, which `ondio` cannot write.
         UnknownPlatformError: For an unknown scheme.
     """
     platform = detect_platform(uri)
@@ -82,10 +82,10 @@ _OPTION_VARIABLES = {
 def get_environment(uri: str, **kwargs) -> dict[str, str]:
     """The environment variables that carry options to another process.
 
-    When these variables are set in another process, its ondio calls on `uri`, made
+    When these variables are set in another process, its `ondio` calls on `uri`, made
     with no options, act as calls made with `kwargs` here. The variables apply to
     every call on the same platform in that process, not only to calls on `uri`.
-    An option set to None gives no variable. It does not touch storage or load an SDK.
+    An option set to `None` gives no variable. It does not touch storage or load an SDK.
 
     That process must not turn the variables off: if it sets
     `AWS_IGNORE_CONFIGURED_ENDPOINT_URLS`, or its AWS config sets

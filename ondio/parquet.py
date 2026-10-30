@@ -22,8 +22,8 @@ def write_parquet(
 ) -> None:
     """Write a `pyarrow.Table` as a hive-partitioned parquet dataset under `uri`.
 
-    The dataset is written to a local temp directory via pyarrow, then uploaded
-    file-by-file through the backend — pyarrow's native S3/GCS filesystems are
+    The dataset is written to a local temp directory via `pyarrow`, then uploaded
+    file-by-file through the backend — `pyarrow`'s native S3/GCS filesystems are
     deliberately not used, so credentials follow the backend path. Requires
     the `parquet` extra.
 
@@ -32,8 +32,8 @@ def write_parquet(
         table: The `pyarrow.Table` to write.
         partition_cols: Columns to hive-partition by (empty for none).
         compression: Parquet compression codec.
-        overwrite: If False, refuse to write when data already exists under
-            the prefix. This check is not atomic with the write. If True,
+        overwrite: If `False`, refuse to write when data already exists under
+            the prefix. This check is not atomic with the write. If `True`,
             delete existing objects first via `list_files` + `delete`.
         max_workers: Thread-pool size for the per-file uploads.
         **kwargs: Forwarded to the backend constructor.

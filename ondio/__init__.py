@@ -1,7 +1,8 @@
-"""ondio: uniform IO for audio data across AWS S3, GCS, HTTP, and local files.
+"""`ondio`: uniform IO for audio data across AWS S3, GCS, HTTP, and local files.
 
 One URI-addressed interface; the platform is detected from the scheme and the
-call is dispatched to the matching backend. See PROJECT.md for the full design.
+call is dispatched to the matching backend. See the [architecture][architecture]
+page for the full design.
 """
 
 from ondio.dispatcher import (

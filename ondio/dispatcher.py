@@ -65,7 +65,7 @@ def download_files(
     input order. The first failure cancels downloads not yet started and
     re-raises; files that already finished are left in place.
 
-    (Counterpart of legacy soundhub_utils `io.download_files(uris, local_dir)`
+    (Counterpart of legacy `soundhub_utils` `io.download_files(uris, local_dir)`
     — with one deliberate change: URIs whose basenames collide raise upfront
     instead of silently overwriting each other in `local_dir`.)
 
@@ -170,7 +170,7 @@ def read_json(uri: str, **kwargs: Any) -> Any:
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
-        The parsed JSON value (dict, list, str, number, bool, or None).
+        The parsed JSON value (`dict`, `list`, `str`, number, `bool`, or `None`).
     """
     return json.loads(read(uri, **kwargs))
 
@@ -209,15 +209,15 @@ def list_files(
     The prefix has folder semantics on every backend: it names the object at
     that exact path (if one exists) plus everything under it as a folder —
     never sibling objects that merely share leading characters
-    ("results/run-1" does not match "results/run-10/x"). To match objects by
+    (`results/run-1` does not match `results/run-10/x`). To match objects by
     partial *filename*, use `required_prefix` instead.
 
     Args:
         uri_prefix: Prefix to list under (a "directory" URI or an exact
             object URI).
-        recursive: If False, list only the immediate level.
+        recursive: If `False`, list only the immediate level.
         max_items: Cap on the number of results, applied after the filename
-            filters; None means unbounded.
+            filters; `None` means unbounded.
         required_prefix: If given, list only objects whose *filename* starts
             with this (applied to every recursively listed key).
         required_ext: If given, list only objects with this file extension
@@ -275,7 +275,7 @@ def exists(uri: str, **kwargs: Any) -> bool:
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
-        True if the object exists (directories/prefixes do not count).
+        `True` if the object exists (directories/prefixes do not count).
     """
     return get_backend(uri, **kwargs).exists(uri)
 
@@ -351,25 +351,25 @@ def read_flac(
 
     Args:
         uri: Fully-qualified storage URI of a FLAC file.
-        start_sec: Window start in seconds; None means from the beginning.
-        end_sec: Window end in seconds; None means to the end of the stream
+        start_sec: Window start in seconds; `None` means from the beginning.
+        end_sec: Window end in seconds; `None` means to the end of the stream
             (values past EOF are clamped, like Python slices).
-        decode: If True (default), return decoded PCM; if False, return the
+        decode: If `True` (default), return decoded PCM; if `False`, return the
             bytes of a standalone FLAC file — the original bytes exactly when
             no window is given (a plain read), a fresh lossless encode of
             the slice otherwise.
         padding_ratio: Deprecated and ignored: ranged reads are
-            sample-exact. A value other than 0.25 emits a
+            sample-exact. A value other than `0.25` emits a
             `DeprecationWarning`; the argument will be removed in 0.4.
-        use_range: Fetch strategy. None (default) picks automatically: ranged
+        use_range: Fetch strategy. `None` (default) picks automatically: ranged
             download for files > 50 MB when the window is < 1/3 of the stream,
-            full download otherwise. True/False forces one path.
+            full download otherwise. `True`/`False` forces one path.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
         With `decode=True`, `(samples, sample_rate)` where `samples` is a
-        float32 array of shape `(frames, channels)` normalized to `[-1, 1]`
-        like libsndfile/soundfile. With `decode=False`, FLAC bytes.
+        `float32` array of shape `(frames, channels)` normalized to `[-1, 1]`
+        like libsndfile/`soundfile`. With `decode=False`, FLAC bytes.
 
     Raises:
         ValueError: If the window is empty, negative, starts past EOF, or
@@ -418,13 +418,13 @@ def download_flac(
     semantics, and the ranged-path note, are as in
     [`read_flac`][ondio.dispatcher.read_flac].
 
-    (Counterpart of legacy soundhub_utils `io.read_flac(src, dest, ...)`.)
+    (Counterpart of legacy `soundhub_utils` `io.read_flac(src, dest, ...)`.)
 
     Args:
         uri: Fully-qualified storage URI of a FLAC file.
         out_path: Local `.flac` destination path; parent directories are created.
-        start_sec: Window start in seconds; None means from the beginning.
-        end_sec: Window end in seconds; None means to the end of the stream.
+        start_sec: Window start in seconds; `None` means from the beginning.
+        end_sec: Window end in seconds; `None` means to the end of the stream.
         padding_ratio: As in [`read_flac`][ondio.dispatcher.read_flac].
         use_range: As in [`read_flac`][ondio.dispatcher.read_flac].
         **kwargs: Forwarded to the backend constructor.

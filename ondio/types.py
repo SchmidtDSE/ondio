@@ -1,4 +1,4 @@
-"""Core data types and custom exceptions for ondio"""
+"""Core data types and custom exceptions for `ondio`"""
 
 from __future__ import annotations
 from dataclasses import dataclass
@@ -17,14 +17,14 @@ class FlacHeader:
 
     @property
     def duration(self) -> float:
-        """Stream duration in seconds (0.0 if sample_rate is 0)."""
+        """Stream duration in seconds (`0.0` if `sample_rate` is 0)."""
         if self.sample_rate == 0:
             return 0.0
         return self.total_samples / self.sample_rate
 
 
 class OndioError(Exception):
-    """Base class for all ondio errors."""
+    """Base class for all `ondio` errors."""
 
 
 class UnknownPlatformError(OndioError):
@@ -32,7 +32,7 @@ class UnknownPlatformError(OndioError):
 
 
 class UnsupportedOperationError(OndioError):
-    """The backend cannot perform the requested operation (e.g. list_files over HTTP)."""
+    """The backend cannot perform the requested operation (e.g. `list_files` over HTTP)."""
 
 
 class ObjectNotFoundError(OndioError):
@@ -48,7 +48,7 @@ class AuthError(OndioError):
 
 
 class Location(NamedTuple):
-    """Where a URI points: the store it is in, and the path in that store ondio reads.
+    """Where a URI points: the store it is in, and the path in that store `ondio` reads.
 
     `store` is `s3://<bucket>`, `gs://<bucket>`, or `file://` for the local disk.
     `path` has no leading `/`. Two URIs with equal locations name the same object.

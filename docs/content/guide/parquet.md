@@ -1,8 +1,8 @@
 # Parquet
 
 Model results go out as hive-partitioned parquet datasets via
-`ondio.parquet.write_parquet` (requires the `parquet` extra for pyarrow). The
-dataset is written to a local temp directory with pyarrow, then uploaded
+`ondio.parquet.write_parquet` (requires the `parquet` extra for `pyarrow`). The
+dataset is written to a local temp directory with `pyarrow`, then uploaded
 file by file through the backend. The temporary directory needs enough free
 space for the dataset. Credentials follow the same path as other `ondio` calls.
 
@@ -29,7 +29,7 @@ Details of use:
 - **`overwrite`** — by default (`overwrite=False`) the call refuses with
   `OndioError` if objects already exist under the prefix. This check is not
   atomic: concurrent writers can both pass it and mix their output. Give each
-  run a unique prefix or coordinate writers outside ondio. `overwrite=True`
+  run a unique prefix or coordinate writers outside `ondio`. `overwrite=True`
   deletes the existing objects first. If writing fails, the dataset can be
   incomplete.
 - **`compression`** — parquet codec, default `"snappy"`.

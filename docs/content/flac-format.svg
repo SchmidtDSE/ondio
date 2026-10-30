@@ -1,0 +1,62 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="480" viewBox="0 0 1040 480" role="img" aria-labelledby="title desc">
+<title id="title">FLAC file layout</title><desc id="desc">A FLAC file is the fLaC marker, then metadata blocks (STREAMINFO first, an optional SEEKTABLE, then others such as tags and artwork), then audio frames. Frames hold the same number of samples but differ in size. Each frame is a header (sync code, block size, sample rate, channels, bit depth, frame or sample number, CRC-8), one subframe per channel, and a CRC-16 footer. ondio finds frames in any byte range by the frame or sample number and the CRC-8.</desc>
+<!-- 8px grid; margins 32; bracket labels y=40, brackets y=52; stream strip y=72..152 (marker 32..104, STREAMINFO 112..296, SEEKTABLE 304..504, other 512..672, frames 688..992);
+     zoom panel y=224..448; group labels y=312, brackets y=324; fields y=336..392 (sync 56, block size 116, sample rate 224, channels 340, bit depth 432, number 524, CRC-8 688, subframes 768, CRC-16 908). -->
+<style>text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;fill:#14304a}.mono{font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace}.heading{font-family:Helvetica,Arial,sans-serif;font-size:24px;font-weight:600}</style>
+<rect width="1040" height="480" fill="#f6f8fb"/>
+<text x="392" y="40" font-size="16" style="fill:#61758a" text-anchor="middle">metadata blocks</text>
+<path d="M112 60 V52 H672 V60" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<text x="840" y="40" font-size="16" style="fill:#61758a" text-anchor="middle">audio frames</text>
+<path d="M688 60 V52 H992 V60" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<rect x="32" y="72" width="72" height="80" rx="6" fill="#f0ecfa" stroke="none"/>
+<text x="68" y="104" font-size="17" style="fill:#4a2e83" text-anchor="middle" class="mono">fLaC</text>
+<text x="68" y="132" font-size="16" style="fill:#61758a" text-anchor="middle">marker</text>
+<rect x="112" y="72" width="184" height="80" rx="6" fill="#e9f1fb" stroke="none"/>
+<text x="128" y="104" font-size="17" style="fill:#1f4e79" class="mono">STREAMINFO</text>
+<text x="128" y="132" font-size="16" style="fill:#61758a">first, 34 bytes</text>
+<rect x="304" y="72" width="200" height="80" rx="6" fill="#e9f1fb" stroke="none"/>
+<text x="320" y="104" font-size="17" style="fill:#1f4e79" class="mono">SEEKTABLE</text>
+<text x="320" y="132" font-size="16" style="fill:#61758a">offset from audio start</text>
+<rect x="512" y="72" width="160" height="80" rx="6" fill="#e9f1fb" stroke="none"/>
+<text x="528" y="104" font-size="17" style="fill:#1f4e79">other blocks</text>
+<text x="528" y="132" font-size="16" style="fill:#61758a">tags, artwork</text>
+<path d="M760 152 L32 224 M856 152 L1008 224" fill="none" stroke="#becbd7" stroke-width="1.5" stroke-dasharray="4 4"/>
+<rect x="688" y="72" width="64" height="80" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="720" y="118" font-size="17" style="fill:#0b6e5c" text-anchor="middle" class="mono">0</text>
+<rect x="760" y="72" width="96" height="80" rx="6" fill="#14a48a" stroke="none"/>
+<text x="808" y="118" font-size="17" style="fill:#f6f8fb" text-anchor="middle" class="mono">1</text>
+<rect x="864" y="72" width="48" height="80" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="888" y="118" font-size="17" style="fill:#0b6e5c" text-anchor="middle" class="mono">2</text>
+<rect x="920" y="72" width="72" height="80" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="956" y="118" font-size="17" style="fill:#0b6e5c" text-anchor="middle" class="mono">3</text>
+<text x="1000" y="118" font-size="17" style="fill:#61758a">…</text>
+<rect x="32" y="224" width="976" height="224" rx="6" fill="#e6f7f3" stroke="none"/>
+<rect x="32" y="224" width="4" height="224" rx="0" fill="#14a48a" stroke="none"/>
+<text x="56" y="264" style="fill:#0b6e5c" class="heading">One frame</text>
+<text x="984" y="260" font-size="17" style="fill:#61758a" text-anchor="end">often 4096 samples; the byte size varies</text>
+<text x="408" y="312" font-size="16" style="fill:#61758a" text-anchor="middle">frame header</text>
+<path d="M56 332 V324 H760 V332" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<text x="836" y="312" font-size="16" style="fill:#61758a" text-anchor="middle">per channel</text>
+<path d="M768 332 V324 H904 V332" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<text x="946" y="312" font-size="16" style="fill:#61758a" text-anchor="middle">footer</text>
+<path d="M908 332 V324 H984 V332" fill="none" stroke="#becbd7" stroke-width="1.5"/>
+<rect x="56" y="336" width="56" height="56" rx="6" fill="#f6f8fb" stroke="none"/>
+<text x="84" y="370" font-size="16" text-anchor="middle">sync</text>
+<rect x="116" y="336" width="104" height="56" rx="6" fill="#f6f8fb" stroke="none"/>
+<text x="168" y="370" font-size="16" text-anchor="middle">block size</text>
+<rect x="224" y="336" width="112" height="56" rx="6" fill="#f6f8fb" stroke="none"/>
+<text x="280" y="370" font-size="16" text-anchor="middle">sample rate</text>
+<rect x="340" y="336" width="88" height="56" rx="6" fill="#f6f8fb" stroke="none"/>
+<text x="384" y="370" font-size="16" text-anchor="middle">channels</text>
+<rect x="432" y="336" width="88" height="56" rx="6" fill="#f6f8fb" stroke="none"/>
+<text x="476" y="370" font-size="16" text-anchor="middle">bit depth</text>
+<rect x="524" y="336" width="160" height="56" rx="6" fill="#14a48a" stroke="none"/>
+<text x="604" y="370" font-size="16" style="fill:#f6f8fb" text-anchor="middle">frame or sample #</text>
+<rect x="688" y="336" width="72" height="56" rx="6" fill="#14a48a" stroke="none"/>
+<text x="724" y="370" font-size="16" style="fill:#f6f8fb" text-anchor="middle">CRC-8</text>
+<rect x="768" y="336" width="136" height="56" rx="6" fill="#f6f8fb" stroke="none"/>
+<text x="836" y="370" font-size="16" text-anchor="middle">subframes</text>
+<rect x="908" y="336" width="76" height="56" rx="6" fill="#f6f8fb" stroke="none"/>
+<text x="946" y="370" font-size="16" text-anchor="middle">CRC-16</text>
+<text x="56" y="424" font-size="16" style="fill:#61758a">Highlighted: the fields ondio checks to find frames in any byte range.</text>
+</svg>

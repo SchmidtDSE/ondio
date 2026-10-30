@@ -35,15 +35,15 @@ def _from_client_error(exc, uri: str) -> OndioError:
 
 
 class AwsBackend:
-    """StorageBackend for AWS S3 (`s3://bucket/key` URIs), via boto3.
+    """`StorageBackend` for AWS S3 (`s3://bucket/key` URIs), via `boto3`.
 
     See [`StorageBackend`][ondio.backends.StorageBackend] for method
-    semantics. Credentials resolve through boto3's native chain; botocore
-    errors are translated into ondio's exception types.
+    semantics. Credentials resolve through `boto3`'s native chain; `botocore`
+    errors are translated into `ondio`'s exception types.
 
     Args:
         endpoint_url: The S3 endpoint, for a store that is not AWS (e.g. RustFS).
-            None uses boto3's own choice.
+            `None` uses `boto3`'s own choice.
         **session_kwargs: Forwarded to `boto3.Session` (e.g. `profile_name`,
             `region_name`).
     """

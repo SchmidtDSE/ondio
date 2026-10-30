@@ -36,18 +36,18 @@ _override: Any | None = None
 
 
 def set_printer(printer_like: Any | None) -> None:
-    """Route ondio's log lines to a custom printer-like object.
+    """Route `ondio`'s log lines to a custom printer-like object.
 
-    Anything duck-typed like cocina's Printer works — attributes ondio logs
+    Anything duck-typed like `cocina`'s `Printer` works — attributes `ondio` logs
     through (`.message`, `.error`, ...) are looked up by name, and ones the
     object doesn't implement are silently skipped. The override is
-    process-global, mirroring the Printer singleton it replaces; per-call
+    process-global, mirroring the `Printer` singleton it replaces; per-call
     routing is not supported (call kwargs are reserved for backend
     configuration).
 
     Args:
-        printer_like: Object to receive ondio's log calls, or None to
-            restore the default — the cocina Printer singleton if cocina is
+        printer_like: Object to receive `ondio`'s log calls, or `None` to
+            restore the default — the `cocina` `Printer` singleton if `cocina` is
             installed, otherwise a silent no-op.
     """
     global _override

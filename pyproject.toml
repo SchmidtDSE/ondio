@@ -93,7 +93,7 @@ zensical = ">=0.0.22"
 mkdocstrings-python = "*"
 
 [tool.pixi.feature.docs.tasks]
-docs-diagram = { cmd = "python docs/make_dark_diagram.py", description = "Write the dark-mode architecture diagram from the light one" }
+docs-diagram = { cmd = "python docs/make_dark_diagram.py", description = "Write the dark-mode docs diagrams from the light ones" }
 docs = { cmd = "zensical serve", depends-on = ["docs-diagram"], description = "Preview the docs site with live reload" }
 docs-build = { cmd = "rm -rf site && zensical build", depends-on = ["docs-diagram"], description = "Build the docs into a clean site/" }
 

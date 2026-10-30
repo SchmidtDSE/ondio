@@ -18,7 +18,7 @@ reads over HTTP also need a server that honors range requests; see
 
 The base install supports local files and S3. Install `ondio[gcs]` for GCS and
 `ondio[http]` for HTTP. S3 uses the credentials and configuration available to
-boto3. GCS uses the credentials and configuration available to the Google Cloud
+`boto3`. GCS uses the credentials and configuration available to the Google Cloud
 Storage client. Configure those credentials before accessing a private bucket.
 To pick an AWS profile or another client setting per call, see
 [Backend options](#backend-options).
@@ -88,7 +88,7 @@ retried after a lost response; compare the bytes if you need to know who wrote i
 
 ## Where a URI points
 
-`locate` gives the store and the path in it that ondio reads, without touching
+`locate` gives the store and the path in it that `ondio` reads, without touching
 storage.
 
 ```python
@@ -159,7 +159,7 @@ ondio.list_files("s3://my-bucket/audio/", profile_name="dse")
 `endpoint_url=` sets the S3 or GCS endpoint, for example an S3 store that is not
 AWS. To make another process (a worker, a batch job) use the same endpoint,
 `get_environment` gives the environment variables to set there; that process then
-calls ondio with no options:
+calls `ondio` with no options:
 
 <!-- docs-test: skip (needs a server at the endpoint) -->
 ```python

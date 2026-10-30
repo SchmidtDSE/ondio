@@ -1,4 +1,4 @@
-# ondio
+# `ondio`
 
 Everything here is importable from `ondio` itself, for example `ondio.read` or
 `ondio.OndioError`.

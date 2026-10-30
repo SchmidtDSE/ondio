@@ -11,14 +11,14 @@
 - `endpoint_url=` sets the S3 or GCS endpoint for one call, for example an S3
   store that is not AWS. See [Endpoints](guide/objects.md#endpoints).
 - `ondio.get_environment(uri, **options)` gives the environment variables that
-  make another process's ondio calls use the same options.
+  make another process's `ondio` calls use the same options.
 - `create` works on GCS, as a conditional upload. GCS transport failures,
-  checksum mismatches, and expired credentials raise ondio errors.
+  checksum mismatches, and expired credentials raise `ondio` errors.
 
 ## 0.3.0 — 2026-10-30
 
 This release changes FLAC behavior. See
-[Migrating from soundhub_utils](guide/differences.md#ranged-windowed-flac-reads)
+[Migrating from `soundhub_utils`](guide/differences.md#ranged-windowed-flac-reads)
 for the details.
 
 - **Ranged FLAC windows are sample-exact.** Before, a ranged read estimated
@@ -26,7 +26,7 @@ for the details.
   come back from the wrong time, by about 30 s, with no error.
 - **Damaged input raises `OndioError`** instead of returning short or invented
   audio. A ranged failure never starts a full download on its own.
-- **soundfile replaces pydub and ffmpeg.** Nothing needs to be on `PATH`. A
+- **`soundfile` replaces pydub and ffmpeg.** Nothing needs to be on `PATH`. A
   windowed re-encode of a 12- or 20-bit source raises `OndioError`, because
   libsndfile writes only 8, 16, and 24 bits.
 - `padding_ratio` is deprecated and ignored.

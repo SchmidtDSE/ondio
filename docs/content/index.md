@@ -1,4 +1,4 @@
-# ondio
+# `ondio`
 
 `ondio` — _ondas_ (Spanish for waves) + io — is a Python package for uniform IO of
 audio data (specifically just `.flac` at the moment) and results derived from
@@ -82,6 +82,6 @@ fetches and parses one.
 - [Objects, files, and JSON](guide/objects.md): backend support, `create`, listing, and endpoints.
 - [FLAC](guide/flac.md): headers, windowed reads, and how ranged reads stay sample-exact.
 - [Parquet](guide/parquet.md): hive-partitioned datasets.
-- [Logging](guide/logging.md): where ondio's log lines go, and how to route or silence them.
+- [Logging](guide/logging.md): where `ondio`'s log lines go, and how to route or silence them.
 - [Architecture](architecture.md): how a URI reaches its backend.
 - [API reference](reference/ondio.md): every public function, from the docstrings.
