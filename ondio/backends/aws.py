@@ -42,14 +42,16 @@ class AwsBackend:
     errors are translated into ondio's exception types.
 
     Args:
+        endpoint_url: The S3 endpoint, for a store that is not AWS (e.g. RustFS).
+            None uses boto3's own choice.
         **session_kwargs: Forwarded to `boto3.Session` (e.g. `profile_name`,
             `region_name`).
     """
 
-    def __init__(self, **session_kwargs):
+    def __init__(self, endpoint_url: str | None = None, **session_kwargs):
         import boto3
 
-        self._client = boto3.Session(**session_kwargs).client("s3")
+        self._client = boto3.Session(**session_kwargs).client("s3", endpoint_url=endpoint_url)
 
     @contextlib.contextmanager
     def _translate(self, uri: str):

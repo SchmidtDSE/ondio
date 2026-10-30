@@ -131,7 +131,7 @@ def create(uri: str, data: bytes, **kwargs: Any) -> None:
     """Write raw bytes to `uri` only if no object exists there.
 
     A reader sees either no object or the complete one, never part of it. Supported
-    on S3 and local disk.
+    on S3, GCS, and local disk.
 
     Args:
         uri: Fully-qualified storage URI to write to.
@@ -139,12 +139,14 @@ def create(uri: str, data: bytes, **kwargs: Any) -> None:
         **kwargs: Forwarded to the backend constructor.
 
     Raises:
-        ObjectExistsError: If an object exists at `uri`. It is not changed.
-        UnsupportedOperationError: On GCS and HTTP, before backend setup.
+        ObjectExistsError: If an object exists at `uri`. It is not changed. On S3
+            and GCS it can be the object that this call wrote, if the client
+            retried after a lost response: compare its bytes to know who wrote it.
+        UnsupportedOperationError: Over HTTP, before backend setup.
         OndioError: For any other failure. This does not prove that nothing was
             written: read `uri` to find out.
     """
-    if detect_platform(uri) in {"gcs", "url"}:
+    if detect_platform(uri) == "url":
         raise UnsupportedOperationError(f"create is not supported for {uri!r}")
     get_backend(uri, **kwargs).create(uri, data)
 

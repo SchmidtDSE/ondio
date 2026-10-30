@@ -6,13 +6,21 @@ like the real API — so the filter tests prove the backend bypasses it.)"""
 import pytest
 
 pytest.importorskip("google.cloud.storage")
+import google.auth.exceptions  # noqa: E402
+import requests  # noqa: E402
 from google.api_core import exceptions as gexc  # noqa: E402
 
-from ondio import AuthError, ObjectNotFoundError, UnsupportedOperationError  # noqa: E402
+from ondio import (  # noqa: E402
+    AuthError,
+    ObjectExistsError,
+    ObjectNotFoundError,
+    OndioError,
+)
 from ondio.backends.gcs import GcsBackend  # noqa: E402
 
 BUCKET = "testbkt"
 PREFIX = f"gs://{BUCKET}"
+ENDPOINT = "http://127.0.0.1:4443"
 
 
 class FakeBlob:
@@ -41,7 +49,9 @@ class FakeBlob:
         with open(filename, "wb") as f:
             f.write(self._store[self.name])
 
-    def upload_from_string(self, data, content_type=None):
+    def upload_from_string(self, data, content_type=None, if_generation_match=None):
+        if if_generation_match == 0 and self.name in self._store:
+            raise gexc.PreconditionFailed("object exists")
         self._store[self.name] = bytes(data, "utf-8") if isinstance(data, str) else bytes(data)
 
     def upload_from_filename(self, filename, content_type=None):
@@ -265,9 +275,36 @@ class TestErrors:
             backend.upload(f"{PREFIX}/new/x.bin", src)
 
 
-def test_create_is_unsupported(backend):
-    with pytest.raises(UnsupportedOperationError):
-        backend.create(f"{PREFIX}/result.json", b"x")
+class TestCreate:
+    def test_create_writes_a_new_object(self, backend):
+        backend.create(f"{PREFIX}/runs/1/result.json", b"first")
+        assert backend.read(f"{PREFIX}/runs/1/result.json") == b"first"
+
+    def test_create_refuses_an_existing_object_and_keeps_it(self, backend):
+        uri = f"{PREFIX}/result.json"
+        backend.create(uri, b"first")
+        with pytest.raises(ObjectExistsError):
+            backend.create(uri, b"second")
+        assert backend.read(uri) == b"first"
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            gexc.ServiceUnavailable("unavailable"),
+            gexc.RetryError("deadline exceeded", cause=None),
+            google.auth.exceptions.TransportError("connection reset"),
+            requests.exceptions.ConnectionError("connection reset"),
+        ],
+    )
+    def test_a_failure_is_not_reported_as_existing(self, backend, monkeypatch, failure):
+        def fail(*args, **kwargs):
+            raise failure
+
+        monkeypatch.setattr(FakeBlob, "upload_from_string", fail)
+        with pytest.raises(OndioError) as raised:
+            backend.create(f"{PREFIX}/result.json", b"x")
+        assert type(raised.value) is OndioError
+        assert raised.value.__cause__ is failure
 
 
 @pytest.mark.parametrize("suffix", ["?b", "#b", "?", "#"])
@@ -279,3 +316,20 @@ def test_a_query_or_fragment_is_refused(backend, store, suffix):
     with pytest.raises(ValueError):
         backend.write(uri, b"other")
     assert store["a"] == b"payload"
+
+
+def test_endpoint_url_reaches_the_gcs_client_and_keeps_its_credentials(monkeypatch):
+    import google.auth
+    from google.oauth2.credentials import Credentials
+
+    credentials = Credentials(token="token")
+    monkeypatch.setattr(google.auth, "default", lambda *a, **k: (credentials, "project"))
+    monkeypatch.delenv("STORAGE_EMULATOR_HOST", raising=False)
+    backend = GcsBackend(endpoint_url=ENDPOINT, project="project")
+    assert backend._client._connection.API_BASE_URL == ENDPOINT
+    assert backend._client._credentials is credentials
+
+
+def test_endpoint_url_with_client_options_is_refused():
+    with pytest.raises(ValueError):
+        GcsBackend(endpoint_url=ENDPOINT, client_options={"api_endpoint": ENDPOINT})

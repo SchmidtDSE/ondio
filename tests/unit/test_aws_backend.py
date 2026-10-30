@@ -9,6 +9,8 @@ import ondio
 from ondio import ObjectExistsError, ObjectNotFoundError, OndioError
 from ondio.registry import get_backend
 
+ENDPOINT = "http://127.0.0.1:9000"
+
 
 @pytest.fixture(autouse=True)
 def prefix(aws_bucket):
@@ -313,3 +315,14 @@ class TestRefusedUris:
     def test_an_encoded_question_mark_is_part_of_the_key(self, prefix):
         ondio.write(f"{prefix}/a%3Fb", b"payload")
         assert ondio.list_files(f"{prefix}/") == [f"{prefix}/a%3Fb"]
+
+
+def test_endpoint_url_reaches_the_s3_client():
+    backend = get_backend("s3://bucket/key", endpoint_url=ENDPOINT)
+    assert backend._client.meta.endpoint_url == ENDPOINT
+
+
+def test_endpoint_url_and_session_options_are_both_used():
+    backend = get_backend("s3://bucket/key", endpoint_url=ENDPOINT, region_name="eu-west-1")
+    assert backend._client.meta.endpoint_url == ENDPOINT
+    assert backend._client.meta.region_name == "eu-west-1"

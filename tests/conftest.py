@@ -23,7 +23,7 @@ FLAC_PROFILES = [
 
 
 @pytest.fixture(autouse=True)
-def _aws_safety(monkeypatch):
+def _aws_safety(monkeypatch, tmp_path):
     """Fake AWS credentials so no test can touch a real account."""
     for var in (
         "AWS_ACCESS_KEY_ID",
@@ -33,6 +33,17 @@ def _aws_safety(monkeypatch):
     ):
         monkeypatch.setenv(var, "testing")
     monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    # A developer's endpoint settings would send the tests somewhere else. A
+    # profile name would fail, because the config file below does not exist.
+    for var in (
+        "AWS_ENDPOINT_URL_S3",
+        "AWS_ENDPOINT_URL",
+        "AWS_IGNORE_CONFIGURED_ENDPOINT_URLS",
+        "AWS_PROFILE",
+        "AWS_DEFAULT_PROFILE",
+    ):
+        monkeypatch.delenv(var, raising=False)
+    monkeypatch.setenv("AWS_CONFIG_FILE", str(tmp_path / "no-aws-config"))
 
 
 @pytest.fixture

@@ -42,7 +42,7 @@ def test_kwargs_forwarded_to_backend_constructor(tmp_path):
         get_backend(str(tmp_path), bogus_option=1)
 
 
-@pytest.mark.parametrize("uri", ["gs://bucket/result.json", "http://example.com/result.json", "https://example.com/result.json"])
+@pytest.mark.parametrize("uri", ["http://example.com/result.json", "https://example.com/result.json"])
 @pytest.mark.parametrize("setup_error", [ImportError("optional SDK unavailable"), RuntimeError("credentials unavailable")])
 def test_create_refuses_unsupported_schemes_before_backend_setup(uri, setup_error, monkeypatch):
     import ondio.dispatcher as dispatcher
@@ -57,6 +57,20 @@ def test_create_refuses_unsupported_schemes_before_backend_setup(uri, setup_erro
     with pytest.raises(UnsupportedOperationError):
         ondio.create(uri, b"x")
     assert attempted == []
+
+
+def test_public_create_reaches_the_gcs_backend(monkeypatch):
+    import ondio.dispatcher as dispatcher
+
+    calls = []
+
+    class Recorder:
+        def create(self, uri, data):
+            calls.append((uri, data))
+
+    monkeypatch.setattr(dispatcher, "get_backend", lambda uri, **kwargs: Recorder())
+    ondio.create("gs://bucket/result.json", b"x")
+    assert calls == [("gs://bucket/result.json", b"x")]
 
 
 @pytest.mark.parametrize(

@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
-from ondio.types import AuthError, ObjectNotFoundError, OndioError, UnsupportedOperationError
+from ondio.types import AuthError, ObjectExistsError, ObjectNotFoundError, OndioError
 
 
 def _split(uri: str) -> tuple[str, str]:
@@ -30,17 +30,27 @@ class GcsBackend:
     into ondio's exception types.
 
     Args:
+        endpoint_url: The GCS API endpoint. The client still uses its normal
+            credentials. None uses the client's own choice.
         **client_kwargs: Forwarded to `google.cloud.storage.Client`
             (e.g. `project`).
+
+    Raises:
+        ValueError: If both `endpoint_url` and `client_options` are given.
     """
 
-    def __init__(self, **client_kwargs):
+    def __init__(self, endpoint_url: str | None = None, **client_kwargs):
         try:
             from google.cloud import storage
         except ImportError as exc:
             raise ImportError(
                 "gs:// support requires the 'gcs' extra: pip install ondio[gcs]"
             ) from exc
+        if endpoint_url is not None:
+            # If both are given, one could silently override the other.
+            if "client_options" in client_kwargs:
+                raise ValueError("give endpoint_url or client_options, not both")
+            client_kwargs["client_options"] = {"api_endpoint": endpoint_url}
         self._client = storage.Client(**client_kwargs)
 
     @contextlib.contextmanager
@@ -93,7 +103,23 @@ class GcsBackend:
             self._blob(uri).upload_from_string(data, content_type="application/octet-stream")
 
     def create(self, uri: str, data: bytes) -> None:
-        raise UnsupportedOperationError(f"create is not supported on GCS yet: {uri}")
+        # A conditional upload: GCS refuses it with 412 if the object exists.
+        import requests
+        from google.api_core import exceptions as gexc
+        from google.auth.exceptions import TransportError
+
+        with self._translate(uri):
+            try:
+                self._blob(uri).upload_from_string(
+                    data, content_type="application/octet-stream", if_generation_match=0
+                )
+            except gexc.PreconditionFailed as exc:
+                # must be caught before _translate sees it: it subclasses
+                # GoogleAPICallError and would become a plain OndioError
+                raise ObjectExistsError(f"object already exists: {uri}") from exc
+            except (TransportError, requests.exceptions.RequestException, gexc.RetryError) as exc:
+                # The request may have reached GCS even though no response arrived.
+                raise OndioError(f"could not confirm create for {uri}: {exc}") from exc
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         dest = Path(out_path)
