@@ -72,6 +72,43 @@ def locate(uri: str) -> Location:
     raise UnsupportedOperationError(f"no fixed storage location for {uri!r}")
 
 
+# For each platform, the environment variable that carries each option to another
+# process. An option that is not here cannot be carried.
+_OPTION_VARIABLES = {
+    "aws": {"endpoint_url": "AWS_ENDPOINT_URL_S3"},
+}
+
+
+def get_environment(uri: str, **kwargs) -> dict[str, str]:
+    """The environment variables that carry options to another process.
+
+    When these variables are set in another process, its ondio calls on `uri`, made
+    with no options, act as calls made with `kwargs` here. The variables apply to
+    every call on the same platform in that process, not only to calls on `uri`.
+    An option set to None gives no variable. It does not touch storage or load an SDK.
+
+    That process must not turn the variables off: if it sets
+    `AWS_IGNORE_CONFIGURED_ENDPOINT_URLS`, or its AWS config sets
+    `ignore_configured_endpoint_urls`, S3 calls use the AWS endpoint, with no error.
+
+    Raises:
+        UnsupportedOperationError: For an option that no variable carries on this
+            platform, such as `region_name`, or `endpoint_url` on GCS. The message
+            names the option, not its value, because a value can hold a secret.
+        UnknownPlatformError: For an unknown scheme.
+    """
+    platform = detect_platform(uri)
+    # A backend treats None as its default, so None needs no variable.
+    options = {name: value for name, value in kwargs.items() if value is not None}
+    variables = _OPTION_VARIABLES.get(platform, {})
+    refused = sorted(name for name in options if name not in variables)
+    if refused:
+        raise UnsupportedOperationError(
+            f"no environment variable carries {', '.join(refused)} on {platform}"
+        )
+    return {variables[name]: value for name, value in options.items()}
+
+
 def get_backend(uri: str, **kwargs) -> StorageBackend:
     """Resolve the backend for a given URI. kwargs are forwarded to the backend constructor."""
     platform = detect_platform(uri)

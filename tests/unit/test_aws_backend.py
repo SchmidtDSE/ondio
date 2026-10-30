@@ -326,3 +326,9 @@ def test_endpoint_url_and_session_options_are_both_used():
     backend = get_backend("s3://bucket/key", endpoint_url=ENDPOINT, region_name="eu-west-1")
     assert backend._client.meta.endpoint_url == ENDPOINT
     assert backend._client.meta.region_name == "eu-west-1"
+
+
+def test_the_environment_gives_a_new_client_the_same_endpoint(monkeypatch):
+    for name, value in ondio.get_environment("s3://bucket/key", endpoint_url=ENDPOINT).items():
+        monkeypatch.setenv(name, value)
+    assert get_backend("s3://bucket/key")._client.meta.endpoint_url == ENDPOINT

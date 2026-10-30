@@ -22,7 +22,7 @@ from ondio.dispatcher import (
     write_json,
 )
 from ondio._log import set_printer
-from ondio.registry import detect_platform, locate
+from ondio.registry import detect_platform, get_environment, locate
 from ondio.types import (
     AuthError,
     FlacHeader,
@@ -51,6 +51,7 @@ __all__ = [
     "download_flac",
     "exists",
     "extract_flac_header",
+    "get_environment",
     "list_files",
     "locate",
     "object_count",

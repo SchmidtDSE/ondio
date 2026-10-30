@@ -1,7 +1,7 @@
 import pytest
 
 import ondio
-from ondio import Location, UnknownPlatformError, UnsupportedOperationError, detect_platform, locate
+from ondio import Location, UnknownPlatformError, UnsupportedOperationError, detect_platform, get_environment, locate
 from ondio.registry import get_backend
 
 
@@ -159,3 +159,43 @@ def test_locate_refuses_a_query_or_fragment(uri):
     # urlparse would drop the text after ? or #, so ondio would name another path.
     with pytest.raises(ValueError):
         locate(uri)
+
+
+ENDPOINT = "http://user:secret@127.0.0.1:9000"
+
+
+@pytest.mark.parametrize(
+    "uri", ["s3://bucket/key", "gs://bucket/key", "file:///data/key", "/data/key", "https://example.com/key"]
+)
+def test_no_options_give_no_variables(uri):
+    assert get_environment(uri) == {}
+
+
+def test_an_option_set_to_none_gives_no_variable():
+    # None is the backend's default, so the other process needs no variable.
+    assert get_environment("s3://bucket/key", endpoint_url=None) == {}
+
+
+def test_an_s3_endpoint_gives_the_s3_endpoint_variable():
+    assert get_environment("s3://bucket/key", endpoint_url=ENDPOINT) == {"AWS_ENDPOINT_URL_S3": ENDPOINT}
+
+
+@pytest.mark.parametrize(
+    ("uri", "options"),
+    [
+        ("s3://bucket/key", {"profile_name": "secret"}),
+        ("s3://bucket/key", {"endpoint_url": ENDPOINT, "region_name": "secret"}),
+        ("gs://bucket/key", {"endpoint_url": ENDPOINT}),
+        ("/data/key", {"endpoint_url": ENDPOINT}),
+        ("https://example.com/key", {"endpoint_url": ENDPOINT}),
+    ],
+)
+def test_an_option_with_no_variable_is_refused_without_its_value(uri, options):
+    with pytest.raises(UnsupportedOperationError) as raised:
+        get_environment(uri, **options)
+    assert "secret" not in str(raised.value)
+
+
+def test_get_environment_refuses_an_unknown_scheme():
+    with pytest.raises(UnknownPlatformError):
+        get_environment("ftp://host/key")
