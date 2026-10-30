@@ -1,0 +1,65 @@
+# Built with Zensical, which reads this file: pixi run -e docs docs
+site_name: ondio
+site_url: https://schmidtdse.github.io/ondio/
+site_description: Uniform IO of audio data and bioacoustic model results across S3, GCS, HTTP, and local filesystems
+repo_url: https://github.com/SchmidtDSE/ondio
+repo_name: SchmidtDSE/ondio
+docs_dir: docs
+site_dir: site
+
+theme:
+  name: material
+  features:
+    - content.code.copy
+    - navigation.sections
+    - navigation.footer
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      toggle:
+        icon: material/weather-night
+        name: Dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      toggle:
+        icon: material/weather-sunny
+        name: Light mode
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Objects, files, and JSON: guide/objects.md
+      - FLAC: guide/flac.md
+      - Parquet: guide/parquet.md
+      - Logging: guide/logging.md
+      - Migrating from soundhub_utils: guide/differences.md
+  - Architecture: architecture.md
+  - API reference:
+      - ondio: reference/ondio.md
+      - ondio.flac: reference/flac.md
+      - ondio.parquet: reference/parquet.md
+      - ondio.backends: reference/backends.md
+  - Changelog: changelog.md
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: ["."]
+          options:
+            docstring_style: google
+            show_root_heading: true
+            show_source: false
+            members_order: source
+            separate_signature: true
+            show_signature_annotations: true

@@ -15,6 +15,11 @@ authors = [{ name = "Michael Catchen", email = "mdcatchen@gmail.com" }]
 requires-python = ">= 3.11"
 version = "0.3.1"
 
+[project.urls]
+Documentation = "https://schmidtdse.github.io/ondio/"
+Changelog = "https://schmidtdse.github.io/ondio/changelog/"
+Source = "https://github.com/SchmidtDSE/ondio"
+
 [project.optional-dependencies]
 gcs = ["google-cloud-storage"]
 parquet = ["pyarrow"]
@@ -53,6 +58,8 @@ test = { features = ["test"] }
 # no-default-feature: building an sdist/wheel needs no editable install, and
 # skipping it keeps the env minimal
 build = { features = ["build"], no-default-feature = true }
+# no-default-feature: the API pages are read from source, so the docs need no install
+docs = { features = ["docs"], no-default-feature = true }
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
@@ -78,6 +85,19 @@ twine = "*"
 build = { cmd = "rm -rf dist && python -m build --no-isolation", description = "Build the sdist and wheel into a clean dist/" }
 check-dist = { cmd = "twine check dist/*", description = "Validate the built artifacts' metadata before upload" }
 publish = { cmd = "twine upload dist/*", depends-on = ["build", "check-dist"], description = "Build, check, then upload to PyPI" }
+
+# autorefs, which the docstrings' [text][ondio.x] links need, arrived in zensical 0.0.22
+[tool.pixi.feature.docs.dependencies]
+python = "3.11.*"
+zensical = ">=0.0.22"
+mkdocstrings-python = "*"
+
+[tool.pixi.feature.docs.tasks]
+docs-diagram = { cmd = "python scripts/make_dark_diagram.py", description = "Write the dark-mode architecture diagram from the light one" }
+docs = { cmd = "zensical serve", depends-on = ["docs-diagram"], description = "Preview the docs site with live reload" }
+# zensical 0.0.26 has no working --strict, so check_docs.py finds missing pages and
+# broken API links instead
+docs-build = { cmd = "rm -rf site && zensical build && python scripts/check_docs.py", depends-on = ["docs-diagram"], description = "Build the docs into a clean site/, failing on a missing page or a broken API link" }
 
 [tool.pixi.feature.test.tasks]
 test = { cmd = "pytest", description = "Run the whole suite (unit, integration, slow, doctests)" }

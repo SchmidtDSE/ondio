@@ -45,6 +45,9 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+site/
+# written from docs/architecture.svg by scripts/make_dark_diagram.py
+docs/architecture-dark.svg
 MANIFEST
 downloads/
 eggs/

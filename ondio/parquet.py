@@ -33,8 +33,8 @@ def write_parquet(
         partition_cols: Columns to hive-partition by (empty for none).
         compression: Parquet compression codec.
         overwrite: If False, refuse to write when data already exists under
-            the prefix (no silent merge). If True, delete it first via
-            `list_files` + `delete`.
+            the prefix. This check is not atomic with the write. If True,
+            delete existing objects first via `list_files` + `delete`.
         max_workers: Thread-pool size for the per-file uploads.
         **kwargs: Forwarded to the backend constructor.
 
