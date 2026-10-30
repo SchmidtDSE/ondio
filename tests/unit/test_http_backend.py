@@ -4,8 +4,8 @@ import io
 
 import numpy as np
 import pytest
+import soundfile as sf
 
-sf = pytest.importorskip("soundfile")
 pytest.importorskip("requests_mock")
 
 import ondio  # noqa: E402
@@ -135,8 +135,6 @@ class TestReadFlac:
         serve_with_ranges(requests_mock, FLAC_URL, flac_bytes)
         requests_mock.head(FLAC_URL, headers={"Content-Length": str(len(flac_bytes))})
         full, _ = sf.read(io.BytesIO(flac_bytes), dtype="float32", always_2d=True)
-        # the 0.5 s pad floor reaches back to t=0 for this window, so even the
-        # forced ranged path is sample-exact
         samples, out_sr = ondio.read_flac(FLAC_URL, 0.4, 2.4, use_range=True)
         assert out_sr == sr
         assert np.array_equal(samples, full[round(0.4 * sr):round(2.4 * sr)])

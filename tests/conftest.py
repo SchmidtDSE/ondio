@@ -9,6 +9,7 @@ from types import SimpleNamespace
 
 import numpy as np
 import pytest
+import soundfile as sf
 
 AWS_BUCKET = "testbkt"
 
@@ -53,8 +54,11 @@ def fx(request, tmp_path_factory):
     bare 24-bit blobs as video). Seeded noise makes any window's samples
     unique, so contiguity checks can locate returned audio in the source.
     """
-    sf = pytest.importorskip("soundfile")
-    name, sr, channels, subtype, bits = request.param
+    return _synth_flac(request.param, tmp_path_factory.mktemp("flac"))
+
+
+def _synth_flac(profile, directory):
+    name, sr, channels, subtype, bits = profile
     rng = np.random.default_rng(7)
     t = np.arange(int(FLAC_DURATION_SEC * sr)) / sr
     sig = np.stack(
@@ -68,7 +72,7 @@ def fx(request, tmp_path_factory):
         ],
         axis=1,
     )
-    path = tmp_path_factory.mktemp("flac") / f"{name}.flac"
+    path = directory / f"{name}.flac"
     sf.write(path, sig, sr, format="FLAC", subtype=subtype)
     data, _ = sf.read(path, dtype="float32", always_2d=True)
     return SimpleNamespace(
@@ -80,3 +84,49 @@ def fx(request, tmp_path_factory):
         duration=FLAC_DURATION_SEC,
         data=data,
     )
+
+
+@pytest.fixture(scope="session")
+def fx_damaged(tmp_path_factory):
+    """Damaged copies of the 48 kHz mono profile, with STREAMINFO untouched.
+
+    `truncated` keeps the first 60% of the bytes (real audio ends near 18 s
+    while the header still claims 30 s, like real recorder files);
+    `corrupt` XORs every 7th byte across 3,000 bytes at the file's midpoint.
+    `data` is the clean decoded reference.
+    """
+    directory = tmp_path_factory.mktemp("flac_damaged")
+    clean = _synth_flac(FLAC_PROFILES[1], directory)
+    raw = clean.path.read_bytes()
+    truncated = directory / "truncated.flac"
+    truncated.write_bytes(raw[: int(len(raw) * 0.6)])
+    corrupt = bytearray(raw)
+    mid = len(raw) // 2
+    for i in range(mid, mid + 3000, 7):
+        corrupt[i] ^= 0x5A
+    corrupt_path = directory / "corrupt.flac"
+    corrupt_path.write_bytes(bytes(corrupt))
+    return SimpleNamespace(
+        truncated=str(truncated),
+        corrupt=str(corrupt_path),
+        sr=clean.sr,
+        data=clean.data,
+    )
+
+
+@pytest.fixture(scope="session")
+def fx_vbr(tmp_path_factory):
+    """30 s, 48 kHz mono, 16-bit: near-silent noise (1e-4) for 0-10 s, loud
+    noise (0.5) for 10-30 s. The quiet third compresses to almost nothing, so
+    a linear seconds-to-bytes estimate misplaces mid-file windows by seconds.
+    soundfile writes no seek table.
+    """
+    sr = 48000
+    rng = np.random.default_rng(11)
+    sig = rng.uniform(-1, 1, int(FLAC_DURATION_SEC * sr))
+    sig[: 10 * sr] *= 1e-4
+    sig[10 * sr:] *= 0.5
+    path = tmp_path_factory.mktemp("flac_vbr") / "vbr.flac"
+    sf.write(path, sig[:, None], sr, format="FLAC", subtype="PCM_16")
+    data, _ = sf.read(path, dtype="float32", always_2d=True)
+    return SimpleNamespace(path=path, uri=str(path), sr=sr, channels=1, duration=FLAC_DURATION_SEC, data=data)

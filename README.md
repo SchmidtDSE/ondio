@@ -99,9 +99,10 @@ some consoles create) are counted by neither.
 
 ## FLAC
 
-FLAC-specific IO lives behind the same read/download split. Decoding requires
-the ffmpeg CLI on PATH (pydub and numpy are core dependencies); header parsing
-and the whole-file `decode=False` path don't touch ffmpeg.
+FLAC-specific IO lives behind the same read/download split. Decoding uses
+soundfile, whose wheels bundle libsndfile, so nothing needs to be on PATH.
+A time window `[start_sec, end_sec)` is cut by sample index:
+`[round(start_sec * sr), round(end_sec * sr))`.
 
 ```python
 import ondio
@@ -117,7 +118,7 @@ samples, rate = ondio.read_flac("s3://my-bucket/audio/rec.flac", 60.0, 63.0)
 # in memory: the same window as bytes of a standalone .flac (lossless re-encode)
 clip = ondio.read_flac("s3://my-bucket/audio/rec.flac", 60.0, 63.0, decode=False)
 
-# in memory: whole file with decode=False is the original bytes exactly, no ffmpeg
+# in memory: whole file with decode=False is the original bytes exactly, no decoding
 raw = ondio.read_flac("s3://my-bucket/audio/rec.flac", decode=False)
 
 # on disk: cut a clip straight to a local .flac file
@@ -129,22 +130,29 @@ ondio.download_flac("s3://my-bucket/audio/rec.flac", "data/rec.flac")
 
 ### Windowed reads of remote files
 
-Windowed reads of large remote files fetch only an estimated byte range around
-the window instead of the whole object. Using byte ranges path is chosen automatically
-for files over 50 MB when the window is under a third of the stream duration;
-`use_range=True`/`False` forces either path. `padding_ratio` (default 0.25)
-controls how much extra audio is fetched on each side of the window to absorb
-byte-estimate error.
+Windowed reads of large remote files fetch only a byte range around the window
+instead of the whole object. The ranged path is chosen automatically for files
+over 50 MB when the window is under a third of the stream duration;
+`use_range=True`/`False` forces either path. A ranged read that succeeds returns
+exactly the samples a full download would.
 
-The byte estimate positions the window using the header's duration, so ranged
-slices are aligned only approximately (within tens of milliseconds) — but they are
-never silently wrong in length: a ranged fetch that fails to decode or comes
-back too short to cover the window raises `OndioError` naming `use_range=False`
-as the exact fallback, rather than returning short or fabricated audio. A
-header that lies about the duration (truncated recorder files exist) can still
-place a covering window at the wrong position without an error — pass
-`use_range=False` whenever the header cannot be trusted; the full download
-reads the window exactly.
+`ondio` estimates the byte range from the file's seek table. If the file has
+no seek table, it uses the average bitrate. The estimate only chooses what to
+fetch. In the fetched bytes, `ondio` finds a run of real FLAC frames:
+CRC-checked headers whose sample numbers continue one another. The frames give
+the true first sample, and the window is cut by sample index. If the run does
+not cover the window, the fetch is widened. Widening fetches only new bytes,
+so a ranged read never fetches more than the file, in a few requests. When the
+estimate is far off (no seek table and very uneven bitrate), a ranged read can
+fetch a large part of the file.
+
+Damaged input raises an error on both paths. A window that reaches into a corrupt
+or truncated region raises `OndioError`. A file whose header overstates its
+length (truncated recorder files exist) raises for windows past its real end.
+Windows clear of the damage read exactly. If the damage is in the bytes already
+fetched, the ranged read raises without widening the fetch. A ranged failure names
+`use_range=False`: a full download is never started on your behalf.
+`padding_ratio` is deprecated and ignored.
 
 ## Parquet
 
@@ -220,36 +228,33 @@ on synthetic fixtures and on real field recordings.
 
 ### Ranged (windowed) FLAC reads
 
-- **Ranged blobs are decoded behind a reconstructed header.** `ondio` prepends
-  a fresh `fLaC` marker plus the file's own STREAMINFO to every fetched byte
-  range before handing it to ffmpeg. Legacy passed the bare mid-stream blob,
-  leaving ffmpeg to blind-scan for a frame sync: measured on clean files,
-  every legacy ranged read came back silently misaligned by 1–18 ms, and
-  24-bit blobs could be probed as a video stream and crash the decoder.
-- **Undershoots are loud.** A ranged fetch that fails to decode, or comes back
-  too short to cover the requested window, raises `OndioError` naming
-  `use_range=False` as the exact fallback — there is no silent short result
-  and no hidden retry or implicit full download. Legacy's only length check
-  was a log message with a 1-second tolerance: it silently returned short
-  audio, and on files whose header overstates the duration (truncated recorder
-  files exist) it returned fabricated audio for windows past the real end of
-  the stream and wrong-position audio for valid windows.
+- **Ranged windows are sample-exact.** Legacy (and `ondio` before 0.3.0)
+  estimated byte offsets linearly from the header's duration and assumed the
+  decoded audio began at the estimated time. FLAC's bitrate varies with the
+  content, so on real multi-hour recordings windows came back from the wrong
+  time — by a median of about 30 s — with no error. `ondio` now locates the
+  window from the frame numbers in the fetched bytes.
+- **Damaged input raises an error.** A window that can't be located or decoded raises
+  `OndioError` naming `use_range=False`; there is no silent short result and
+  no implicit full download. Legacy's only length check was a log message with
+  a 1-second tolerance: it silently returned short audio, and on files whose
+  header overstates the duration it returned fabricated audio for windows past
+  the real end of the stream.
 - **Ranged fetches are optional and bounded.** Legacy always byte-ranged
   partial requests, with no full-file fallback. `ondio` ranges automatically
-  only for files over 50 MB with windows under a third of the duration, and
-  `use_range=False` always forces the exact full-download path.
-- **The byte estimate skips the metadata.** Byte positions are interpolated
-  from the first audio byte onward, not from byte 0, so header and artwork
-  bytes no longer skew the time→byte map.
-- **Millisecond offsets are rounded, not truncated.** Float subtraction
-  artifacts (`1.4 - 0.4 == 0.9999…`) shaved a millisecond — tens of samples —
-  off legacy slices.
-
-One caveat is shared with legacy: a ranged window that decodes and covers the
-requested length, but was positioned using a header that lies about the
-duration, can still come from the wrong part of the stream with no error —
-only undershoots are caught. Pass `use_range=False` whenever the header cannot
-be trusted.
+  only for files over 50 MB with windows under a third of the duration. A
+  ranged read fetches each byte at most once, so never more than the file, and
+  `use_range=False` always forces the full-download path.
+- **Windows are cut by sample, not millisecond.** Legacy sliced at integer
+  milliseconds (truncating, so float artifacts like `1.4 - 0.4 == 0.9999…`
+  cost it a further millisecond); `ondio` cuts `[round(start_sec * sr),
+  round(end_sec * sr))` on every path.
+- **No ffmpeg.** Decoding and encoding use soundfile, whose wheels bundle
+  libsndfile. A whole-file decode of a truncated or unknown-length stream now
+  raises `OndioError`; ffmpeg used to return the decodable part. A windowed
+  re-encode (`decode=False` or `download_flac`) of a 12- or 20-bit source
+  raises `OndioError`, because libsndfile writes only 8, 16 and 24 bits;
+  `decode=True` still reads it.
 
 ### FLAC header parsing
 
@@ -297,5 +302,5 @@ Each call resolves a backend from the URI scheme and delegates to it:
 
 - **dispatcher** — what callers import: every function takes a URI, infers the platform, and delegates. No platform types leak out.
 - **registry** — the strategy lookup: maps the URI scheme to a platform name and lazily constructs that platform's backend.
-- **format helpers** — FLAC and Parquet logic written once against the backend protocol, so partial FLAC reads work identically on S3, GCS, HTTP, and local files. FLAC decoding/slicing shells out to ffmpeg via pydub (requires the ffmpeg CLI on PATH).
+- **format helpers** — FLAC and Parquet logic written once against the backend protocol, so partial FLAC reads work identically on S3, GCS, HTTP, and local files. FLAC decoding and encoding use soundfile (libsndfile, bundled in its wheel).
 - **backends** — one class per platform implementing the byte-level protocol (`read_range` is what makes partial reads cheap on remote files); each wraps its platform SDK and translates its errors to ondio's exception types.

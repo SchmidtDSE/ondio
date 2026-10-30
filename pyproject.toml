@@ -2,9 +2,9 @@
 dependencies = [
     "boto3>=1.42,<2",
     "numpy",
-    "pydub",
-    # backport of stdlib audioop, removed in Python 3.13; earlier versions ship it
-    "audioop-lts; python_version >= '3.13'",
+    # libsndfile ships inside the wheel (all platforms from 0.12; 0.12.0
+    # could fail to find it), so no system audio tools are needed
+    "soundfile>=0.12.1",
 ]
 name = "ondio"
 description = "Uniform IO of audio data and bioacoustic model results across S3, GCS, HTTP, and local filesystems"
@@ -13,7 +13,7 @@ license = "BSD-3-Clause"
 license-files = ["LICENSE.md"]
 authors = [{ name = "Michael Catchen", email = "mdcatchen@gmail.com" }]
 requires-python = ">= 3.11"
-version = "0.2.4"
+version = "0.3.0"
 
 [project.optional-dependencies]
 gcs = ["google-cloud-storage"]
@@ -48,15 +48,11 @@ cocina = { git = "https://github.com/SchmidtDSE/cocina", rev = "81ba904aa16a31eb
 
 # Environments
 [tool.pixi.environments]
-default = { features = ["audio", "http"] }
-test = { features = ["test", "audio"] }
-# no-default-feature: building an sdist/wheel needs neither ffmpeg nor an
-# editable install, and skipping them keeps the env minimal
+default = { features = ["http"] }
+test = { features = ["test"] }
+# no-default-feature: building an sdist/wheel needs no editable install, and
+# skipping it keeps the env minimal
 build = { features = ["build"], no-default-feature = true }
-
-# pydub shells out to the ffmpeg CLI; pip can't provide the binary, conda can.
-[tool.pixi.feature.audio.dependencies]
-ffmpeg = "*"
 
 [tool.pixi.feature.test.dependencies]
 pytest = "*"
@@ -68,9 +64,6 @@ requests-mock = "*"
 requests = "*"
 google-cloud-storage = "*"
 pyarrow = "*"
-
-[tool.pixi.feature.test.pypi-dependencies]
-soundfile = "*"
 
 # --no-isolation: use the conda-provided hatchling instead of letting
 # python-build pip-install a backend at build time, so the exclude-newer

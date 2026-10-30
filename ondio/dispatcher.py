@@ -344,8 +344,8 @@ def read_flac(
 ) -> tuple[np.ndarray, int] | bytes:
     """Read a FLAC file — whole, or a `[start_sec, end_sec]` window — into memory.
 
-    Decoding shells out to the ffmpeg CLI, which must be on PATH; the
-    whole-file `decode=False` fast path never invokes it.
+    Windows are cut by sample index: `[round(start_sec * sr),
+    round(end_sec * sr))`.
 
     Args:
         uri: Fully-qualified storage URI of a FLAC file.
@@ -354,11 +354,11 @@ def read_flac(
             (values past EOF are clamped, like Python slices).
         decode: If True (default), return decoded PCM; if False, return the
             bytes of a standalone FLAC file — the original bytes exactly when
-            no window is given (no ffmpeg involved), a fresh lossless encode
-            of the slice otherwise.
-        padding_ratio: Fraction of the window duration fetched as extra
-            padding on each side of the ranged download (ignored on the
-            full-download path).
+            no window is given (a plain read), a fresh lossless encode of
+            the slice otherwise.
+        padding_ratio: Deprecated and ignored: ranged reads are
+            sample-exact. A value other than 0.25 emits a
+            `DeprecationWarning`; the argument will be removed in 0.4.
         use_range: Fetch strategy. None (default) picks automatically: ranged
             download for files > 50 MB when the window is < 1/3 of the stream,
             full download otherwise. True/False forces one path.
@@ -370,20 +370,31 @@ def read_flac(
         like libsndfile/soundfile. With `decode=False`, FLAC bytes.
 
     Raises:
-        ValueError: If the window is empty, negative, or starts past EOF.
-        OndioError: If `uri` is not a valid FLAC stream, or the stream
-            reports zero duration and a window was requested.
+        ValueError: If the window is empty, negative, starts past EOF, or
+            holds no samples.
+        OndioError: If any of these is true:
 
-    Warning:
-        The ranged path estimates byte positions linearly from the header's
-        duration: the slice is aligned only approximately (tens of ms), and a
-        header that lies about the duration (truncated recorder files exist)
-        yields audio from the wrong position with no error. Pass
-        `use_range=False` when the header cannot be trusted.
+            - `uri` is not a valid FLAC stream.
+            - A window was requested and the stream reports zero duration.
+            - The audio to decode is corrupt or truncated.
+            - A whole-file read meets a stream of unknown length.
+            - `decode=False` must re-encode a window of a source that is
+              not 8, 16 or 24 bits deep.
+
+    Note:
+        The ranged path returns exactly the samples a full download would.
+        A byte estimate chooses what to fetch. The frame numbers in the
+        fetched bytes give the window's position. If the frames do not
+        cover the window, the fetch widens; it fetches each byte at most
+        once, so it never fetches more than the file. For a corrupt or
+        truncated region the ranged path raises `OndioError` naming
+        `use_range=False`. It never starts a full download.
     """
+    # Deprecation shim, removed with padding_ratio in 0.4.
+    _flac._check_padding_ratio(padding_ratio, stacklevel=3)
     return _flac.read_flac(
         get_backend(uri, **kwargs), uri, start_sec, end_sec,
-        decode=decode, padding_ratio=padding_ratio, use_range=use_range,
+        decode=decode, padding_ratio=_flac._DEFAULT_PADDING_RATIO, use_range=use_range,
     )
 
 
@@ -399,11 +410,11 @@ def download_flac(
 ) -> None:
     """Download a FLAC file — whole, or a `[start_sec, end_sec]` window — to a local path.
 
-    With no window this is a plain byte-for-byte download (no ffmpeg). With
-    one, the window is decoded with ffmpeg, sliced at millisecond granularity,
-    and re-encoded — losslessly identical PCM, but not byte-identical to the
-    source. Window and fetch semantics, requirements, and the ranged-path
-    warning are as in [`read_flac`][ondio.dispatcher.read_flac].
+    With no window this is a plain byte-for-byte download. With one, the
+    window is decoded, cut by sample index, and re-encoded — losslessly
+    identical PCM, but not byte-identical to the source. Window and fetch
+    semantics, and the ranged-path note, are as in
+    [`read_flac`][ondio.dispatcher.read_flac].
 
     (Counterpart of legacy soundhub_utils `io.read_flac(src, dest, ...)`.)
 
@@ -417,13 +428,21 @@ def download_flac(
         **kwargs: Forwarded to the backend constructor.
 
     Raises:
-        ValueError: If the window is empty, negative, or starts past EOF.
-        OndioError: If `uri` is not a valid FLAC stream, or the stream
-            reports zero duration and a window was requested.
+        ValueError: If the window is empty, negative, starts past EOF, or
+            holds no samples.
+        OndioError: If any of these is true:
+
+            - `uri` is not a valid FLAC stream.
+            - A window was requested and the stream reports zero duration.
+            - The window's audio is corrupt or truncated.
+            - The source is not 8, 16 or 24 bits deep, so the window cannot
+              be re-encoded.
     """
+    # Deprecation shim, removed with padding_ratio in 0.4.
+    _flac._check_padding_ratio(padding_ratio, stacklevel=3)
     _flac.download_flac(
         get_backend(uri, **kwargs), uri, out_path, start_sec, end_sec,
-        padding_ratio=padding_ratio, use_range=use_range,
+        padding_ratio=_flac._DEFAULT_PADDING_RATIO, use_range=use_range,
     )
 
 
