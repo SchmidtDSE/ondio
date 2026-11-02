@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import contextlib
 import os
+import shutil
 import uuid
 from collections.abc import Callable, Iterator
 from pathlib import Path
@@ -258,14 +259,16 @@ def _replace_on_success(out_path: str | os.PathLike[str]) -> Iterator[Path]:
     """Give a temporary path beside `out_path`; move it onto `out_path` if the block succeeds.
 
     A failed download then leaves no partial file, and a file already at `out_path`
-    stays as it was. The caller creates the temporary file, so it gets the normal
-    permissions.
+    stays as it was. The caller creates the temporary file, so a new file gets the
+    normal permissions. A replaced file keeps its own, so they never get wider.
     """
     dest = Path(out_path)
     dest.parent.mkdir(parents=True, exist_ok=True)
     temporary = dest.with_name(f".{dest.name}.{uuid.uuid4().hex}.partial")
     try:
         yield temporary
+        with contextlib.suppress(FileNotFoundError):
+            shutil.copymode(dest, temporary)
         os.replace(temporary, dest)
     finally:
         temporary.unlink(missing_ok=True)

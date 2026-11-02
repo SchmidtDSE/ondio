@@ -213,11 +213,14 @@ class TestFailures:
             HttpBackend().read(url)
         assert not isinstance(raised.value, ondio.OndioError)
 
-    def test_bad_header_is_a_value_error(self, requests_mock):
+    @pytest.mark.parametrize("value", [91827, "ab\r\nSECRET-VALUE"])
+    def test_bad_header_is_a_value_error_without_its_value(self, requests_mock, value):
         requests_mock.get(URL, content=CONTENT)
         with pytest.raises(ValueError) as raised:
-            HttpBackend(headers={"X-A": 1}).read(URL)
+            HttpBackend(headers={"X-A": value}).read(URL)
         assert not isinstance(raised.value, ondio.OndioError)
+        assert str(value) not in str(raised.value)
+        assert "SECRET-VALUE" not in str(raised.value)
 
 
 class TestTimeout:
@@ -254,6 +257,23 @@ TOKEN = "secret-token-value"
 
 
 class TestOptions:
+    def test_cookies_and_headers_stay_off_another_host(self, requests_mock):
+        requests_mock.get(URL, status_code=302, headers={"Location": "http://cdn.example.com/a.bin"})
+        requests_mock.get("http://cdn.example.com/a.bin", content=CONTENT)
+        backend = HttpBackend(headers={"X-Api-Key": "k"}, cookies={"sid": "s"})
+        assert backend.read(URL) == CONTENT
+        redirected = requests_mock.last_request
+        assert "X-Api-Key" not in redirected.headers
+        assert "Cookie" not in redirected.headers
+
+    def test_cookies_and_headers_follow_a_redirect_on_the_same_host(self, requests_mock):
+        requests_mock.get(URL, status_code=302, headers={"Location": "http://files.example.com/b.bin"})
+        requests_mock.get("http://files.example.com/b.bin", content=CONTENT)
+        HttpBackend(headers={"X-Api-Key": "k"}, cookies={"sid": "s"}).read(URL)
+        redirected = requests_mock.last_request
+        assert redirected.headers["X-Api-Key"] == "k"
+        assert "sid=s" in redirected.headers["Cookie"]
+
     def test_headers_reach_every_request(self, requests_mock, tmp_path):
         serve_with_ranges(requests_mock, URL, CONTENT)
         requests_mock.head(URL, headers={"Content-Length": "10"})

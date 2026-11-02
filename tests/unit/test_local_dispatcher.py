@@ -461,6 +461,18 @@ def test_read_range_with_a_given_backend(tmp_path):
     assert fake.calls == 1
 
 
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_download_keeps_the_mode_of_a_replaced_file(tmp_path):
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"new")
+    dest = tmp_path / "a.bin"
+    dest.write_bytes(b"old")
+    dest.chmod(0o600)
+    ondio.download(str(src), dest)
+    assert dest.read_bytes() == b"new"
+    assert dest.stat().st_mode & 0o777 == 0o600
+
+
 def test_failed_local_download_leaves_no_partial_file(tmp_path, monkeypatch):
     import shutil
 

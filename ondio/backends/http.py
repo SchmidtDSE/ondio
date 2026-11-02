@@ -23,6 +23,21 @@ from ondio.types import (
 _CHUNK = 1024 * 1024
 
 
+def _session_class(requests, header_names: tuple[str, ...]):
+    """A `requests.Session` that keeps the caller's cookies and headers off other hosts."""
+
+    class Session(requests.Session):
+        def rebuild_auth(self, prepared_request, response):
+            # requests drops only Authorization when a redirect goes to another host.
+            if self.should_strip_auth(response.request.url, prepared_request.url):
+                prepared_request.headers.pop("Cookie", None)
+                for name in header_names:
+                    prepared_request.headers.pop(name, None)
+            super().rebuild_auth(prepared_request, response)
+
+    return Session
+
+
 class HttpBackend:
     """Read-only `StorageBackend` for plain `http(s)://` URLs, via `requests`.
 
@@ -36,7 +51,8 @@ class HttpBackend:
     failure or timeout is `NetworkError`, and any other is `OndioError`.
 
     For a bearer token, give `headers={"Authorization": "Bearer <token>"}`.
-    `requests` drops `Authorization` when it follows a redirect to another host.
+    A redirect to another host gets no `Authorization`, no cookies, and none of
+    the `headers` given here.
     No error message holds an option's value.
 
     Args:
@@ -78,6 +94,7 @@ class HttpBackend:
         self._requests = requests
         # Copies, so a later change to the caller's dicts does nothing.
         self._headers = dict(headers or {})
+        self._session_class = _session_class(requests, tuple(self._headers))
         self._cookies = dict(cookies or {})
         self._auth = auth
         self._verify = verify
@@ -89,7 +106,7 @@ class HttpBackend:
     def _session(self):
         session = getattr(self._local, "session", None)
         if session is None:
-            session = self._local.session = self._requests.Session()
+            session = self._local.session = self._session_class()
             session.headers.update(self._headers)
             session.cookies.update(self._cookies)
             session.auth = self._auth
@@ -100,10 +117,10 @@ class HttpBackend:
         exceptions = self._requests.exceptions
         try:
             yield
-        except ValueError:
+        except ValueError as exc:
             # requests raises ValueErrors (InvalidURL, InvalidHeader, ...) for a bad
-            # request, not a failed fetch: keep them as they are.
-            raise
+            # request, not a failed fetch. Their text can hold a header value.
+            raise ValueError(f"invalid HTTP request for {uri}: {type(exc).__name__}") from exc
         # ChunkedEncodingError: the body stopped in the middle.
         except (
             exceptions.ConnectionError,

@@ -246,8 +246,8 @@ at its first call.
 | `timeout` | `(10, 60)` | Seconds: `(connect, read)`, one number, or `None` for no limit |
 | `allow_redirects` | `True` | If `False`, a 3xx answer raises `OndioError` |
 
-A bearer token is a header. `requests` does not send `Authorization` when a
-redirect goes to another host. No `ondio` error message holds an option's value.
+A bearer token is a header. When a redirect goes to another host, `ondio` sends
+it no `Authorization`, no cookies, and none of the headers you gave. No `ondio` error message holds an option's value.
 
 <!-- docs-test: skip (needs an HTTPS server) -->
 ```python

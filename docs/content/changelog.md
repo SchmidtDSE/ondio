@@ -27,7 +27,8 @@ needs no change.
 - **The `gcs` extra needs `google-cloud-storage` 3 or later.** `create` already
   needed it; now every GCS call does.
 - **A failed `download` leaves no partial file**, on every backend. A file already
-  at the local path is kept.
+  at the local path is kept. On GCS, HTTP and local paths, a file that a download
+  replaces keeps its permissions.
 - **An S3 request that `botocore` refuses before sending it is `ValueError`**, for
   example one with an empty key. Before, `ParamValidationError` escaped.
 
@@ -36,7 +37,8 @@ needs no change.
 - `ondio.NetworkError`: no answer came from the store. The request can be retried.
 - `HttpBackend` options: `headers`, `auth`, `cookies`, `verify`, `timeout` and
   `allow_redirects`. They also work per call, as in `ondio.read(url, headers=...)`.
-  See [Private HTTPS files](guide/objects.md#private-https-files).
+  A redirect to another host gets none of the cookies or headers. See
+  [Private HTTPS files](guide/objects.md#private-https-files).
 - `AwsBackend(client=...)` and `GcsBackend(client=...)` use a client that you made,
   for example an unsigned S3 client for a public bucket.
 - Every public function takes `backend=`, a backend to use instead of one built from
