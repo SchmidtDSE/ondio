@@ -346,8 +346,12 @@ def _raise(exc):
 
 class TestErrorTranslation:
     def test_unknown_profile_is_an_auth_error(self):
-        with pytest.raises(ondio.AuthError):
+        with pytest.raises(ondio.AuthError, match="for the new S3 client: ProfileNotFound"):
             AwsBackend(profile_name="nope")
+
+    def test_bad_option_name_stays_a_type_error(self):
+        with pytest.raises(TypeError):
+            AwsBackend(bogus_option=1)
 
     @pytest.mark.parametrize("method", ["get_object", "head_object", "put_object"])
     def test_missing_credentials_are_an_auth_error(self, prefix, monkeypatch, method):

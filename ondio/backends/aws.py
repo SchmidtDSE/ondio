@@ -99,7 +99,7 @@ class AwsBackend:
             return
         import boto3
 
-        with self._translate("S3 client setup"):
+        with self._translate("the new S3 client"):
             self._client = boto3.Session(**session_kwargs).client("s3", endpoint_url=endpoint_url)
 
     @contextlib.contextmanager
@@ -187,6 +187,8 @@ class AwsBackend:
         bucket, key = _split(uri)
         dest = Path(out_path)
         dest.parent.mkdir(parents=True, exist_ok=True)
+        # No _replace_on_success: download_file already writes to a temporary
+        # file and renames it only when the download is complete.
         with self._translate(uri):
             self._client.download_file(bucket, key, str(dest))
 

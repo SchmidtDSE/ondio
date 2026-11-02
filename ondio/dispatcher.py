@@ -283,6 +283,7 @@ def upload(
     Raises:
         FileNotFoundError: If `source_path` is not an existing file.
     """
+    # _resolve also refuses options, but a ValueError must come before a FileNotFoundError.
     _refuse_options(backend, kwargs)
     if not Path(source_path).is_file():
         raise FileNotFoundError(f"no such file to upload: {source_path}")

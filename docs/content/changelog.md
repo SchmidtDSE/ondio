@@ -12,7 +12,7 @@ needs no change.
   `NoCredentialsError`, `ProfileNotFound`, `EndpointConnectionError`,
   `DefaultCredentialsError` and `requests.ConnectionError`) now raise `AuthError`,
   `NetworkError` or `OndioError`. The SDK error is the `__cause__`. Backend
-  constructors are translated too. A bad URL is still `ValueError`, and a missing
+  constructors are translated too. A bad URL or HTTP header is still `ValueError`, and a missing
   extra is still `ImportError`. See [Errors](guide/objects.md#errors).
 - **S3 and GCS `create` with no credentials raises `AuthError`**, not "could not
   confirm create". A transport failure in `create` raises `NetworkError`.

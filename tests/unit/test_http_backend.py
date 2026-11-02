@@ -213,6 +213,12 @@ class TestFailures:
             HttpBackend().read(url)
         assert not isinstance(raised.value, ondio.OndioError)
 
+    def test_bad_header_is_a_value_error(self, requests_mock):
+        requests_mock.get(URL, content=CONTENT)
+        with pytest.raises(ValueError) as raised:
+            HttpBackend(headers={"X-A": 1}).read(URL)
+        assert not isinstance(raised.value, ondio.OndioError)
+
 
 class TestTimeout:
     def test_default_timeout_on_every_request(self, requests_mock, tmp_path):
@@ -317,7 +323,24 @@ class TestOptions:
             backend.read(URL)
         with pytest.raises(ondio.OndioError, match="302"):
             backend.size(URL)
+        with pytest.raises(ondio.OndioError, match="302"):
+            backend.read_range(URL, 0, 3)
+        with pytest.raises(ondio.OndioError, match="302"):
+            backend.exists(URL)
         assert target.call_count == 0
+
+    def test_redirect_not_followed_by_exists_fallback_get(self, requests_mock):
+        requests_mock.head(URL, status_code=405)
+        requests_mock.get(URL, status_code=302, headers={"Location": "http://other/"})
+        with pytest.raises(ondio.OndioError, match="302"):
+            HttpBackend(allow_redirects=False).exists(URL)
+
+    def test_redirect_not_followed_by_download_leaves_no_file(self, requests_mock, tmp_path):
+        requests_mock.get(URL, status_code=302, headers={"Location": "http://other/"},
+                          content=b"<html>moved</html>")
+        with pytest.raises(ondio.OndioError, match="302"):
+            HttpBackend(allow_redirects=False).download(URL, tmp_path / "a.bin")
+        assert list(tmp_path.iterdir()) == []
 
     def test_no_message_holds_a_header_value(self, requests_mock):
         requests_mock.get(URL, status_code=500)

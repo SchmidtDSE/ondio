@@ -32,7 +32,7 @@ class HttpBackend:
     infeasible over plain HTTP. `read_range` verifies the server honored the
     `Range` header (206) and refuses to pass off a full-body 200 as a range.
 
-    `requests` errors are translated: a bad URL is `ValueError`, a connection
+    `requests` errors are translated: a bad URL or header is `ValueError`, a connection
     failure or timeout is `NetworkError`, and any other is `OndioError`.
 
     For a bearer token, give `headers={"Authorization": "Bearer <token>"}`.
@@ -93,7 +93,6 @@ class HttpBackend:
             session.headers.update(self._headers)
             session.cookies.update(self._cookies)
             session.auth = self._auth
-            session.verify = self._verify
         return session
 
     @contextlib.contextmanager
@@ -101,8 +100,10 @@ class HttpBackend:
         exceptions = self._requests.exceptions
         try:
             yield
-        except (exceptions.InvalidURL, exceptions.MissingSchema, exceptions.InvalidSchema):
-            raise  # already ValueErrors: a bad request, not a failed fetch
+        except ValueError:
+            # requests raises ValueErrors (InvalidURL, InvalidHeader, ...) for a bad
+            # request, not a failed fetch: keep them as they are.
+            raise
         # ChunkedEncodingError: the body stopped in the middle.
         except (
             exceptions.ConnectionError,
@@ -113,8 +114,8 @@ class HttpBackend:
         except exceptions.RequestException as exc:
             raise OndioError(f"HTTP request failed for {uri}: {type(exc).__name__}") from exc
 
-    # verify is also passed per request: requests replaces session.verify with
-    # REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE when either is set.
+    # verify is passed per request, not set on the session: requests replaces
+    # session.verify with REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE when either is set.
     def _get(self, uri: str, **kwargs):
         return self._session.get(
             uri,

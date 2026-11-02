@@ -80,7 +80,7 @@ class GcsBackend:
             if "client_options" in client_kwargs:
                 raise ValueError("give endpoint_url or client_options, not both")
             client_kwargs["client_options"] = {"api_endpoint": endpoint_url}
-        with self._translate("GCS client setup"):
+        with self._translate("the new GCS client"):
             self._client = storage.Client(**client_kwargs)
 
     @contextlib.contextmanager
@@ -90,6 +90,8 @@ class GcsBackend:
         from google.auth.exceptions import DefaultCredentialsError, RefreshError
         from google.cloud.storage.exceptions import DataCorruption, InvalidResponse
 
+        # The messages name only the type: the SDK's text can hold a request URL,
+        # and an upload URL carries an upload_id that grants write access.
         try:
             yield
         except gexc.NotFound as exc:
@@ -97,9 +99,7 @@ class GcsBackend:
         except (gexc.Forbidden, gexc.Unauthorized) as exc:
             raise AuthError(f"access denied: {uri}") from exc
         except gexc.GoogleAPICallError as exc:
-            raise OndioError(f"GCS error for {uri}: {exc}") from exc
-        # These messages name only the type: the SDK's text can hold a request URL,
-        # and an upload URL carries an upload_id that grants write access.
+            raise OndioError(f"GCS error for {uri}: {type(exc).__name__}") from exc
         except (DefaultCredentialsError, RefreshError) as exc:
             raise AuthError(f"GCS credentials failed for {uri}: {type(exc).__name__}") from exc
         except _transport_errors() as exc:

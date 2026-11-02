@@ -359,7 +359,7 @@ def test_missing_default_credentials_are_an_auth_error(monkeypatch):
     monkeypatch.setattr(google.auth, "default", no_credentials)
     monkeypatch.delenv("STORAGE_EMULATOR_HOST", raising=False)
     monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
-    with pytest.raises(AuthError):
+    with pytest.raises(AuthError, match="for the new GCS client: DefaultCredentialsError"):
         GcsBackend()
 
 
@@ -399,13 +399,19 @@ class TestGivenClient:
         assert next(iter(option.values())) not in str(raised.value)
 
 
+SESSION_URL = "POST https://storage.example/upload?upload_id=SECRET-SESSION"
+
+
+@pytest.mark.parametrize("failure", [
+    requests.ConnectionError(SESSION_URL),
+    gexc.ServiceUnavailable(SESSION_URL),  # the SDK puts the request URL in API errors
+], ids=["transport", "api"])
 @pytest.mark.parametrize("method, call", [
     ("upload_from_filename", "upload"),
     ("upload_from_string", "create"),
     ("download_as_bytes", "read"),
 ])
-def test_a_session_url_is_not_in_the_message(backend, monkeypatch, tmp_path, method, call):
-    failure = requests.ConnectionError("POST https://storage.example/upload?upload_id=SECRET-SESSION")
+def test_a_session_url_is_not_in_the_message(backend, monkeypatch, tmp_path, method, call, failure):
 
     def fail(*args, **kwargs):
         raise failure
@@ -417,7 +423,7 @@ def test_a_session_url_is_not_in_the_message(backend, monkeypatch, tmp_path, met
     run = {"upload": lambda: backend.upload(uri, src),
            "create": lambda: backend.create(f"{PREFIX}/new.bin", b"x"),
            "read": lambda: backend.read(uri)}[call]
-    with pytest.raises(NetworkError) as raised:
+    with pytest.raises(OndioError) as raised:
         run()
     assert "SECRET-SESSION" not in str(raised.value)
     assert raised.value.__cause__ is failure
