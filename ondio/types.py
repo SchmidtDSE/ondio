@@ -47,6 +47,13 @@ class AuthError(OndioError):
     """The backend rejected the request for authentication/authorization reasons."""
 
 
+class NetworkError(OndioError):
+    """No answer came from the store: the connection failed or closed, or it timed out.
+
+    The request may be retried.
+    """
+
+
 class Location(NamedTuple):
     """Where a URI points: the store it is in, and the path in that store `ondio` reads.
 

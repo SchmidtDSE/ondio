@@ -4,9 +4,13 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from botocore.exceptions import (
+    BotoCoreError, ConnectionClosedError, EndpointConnectionError, NoCredentialsError, ReadTimeoutError,
+)
 
 import ondio
 from ondio import ObjectExistsError, ObjectNotFoundError, OndioError
+from ondio.backends import AwsBackend
 from ondio.registry import get_backend
 
 ENDPOINT = "http://127.0.0.1:9000"
@@ -282,7 +286,8 @@ class TestCreate:
         monkeypatch.setattr(dispatcher, "get_backend", lambda uri, **kwargs: backend)
         with pytest.raises(OndioError) as raised:
             ondio.create(uri, b"x")
-        assert type(raised.value) is OndioError
+        assert type(raised.value) is ondio.NetworkError
+        assert "could not confirm create" in str(raised.value)
         assert raised.value.__cause__ is failure
 
 
@@ -332,3 +337,57 @@ def test_the_environment_gives_a_new_client_the_same_endpoint(monkeypatch):
     for name, value in ondio.get_environment("s3://bucket/key", endpoint_url=ENDPOINT).items():
         monkeypatch.setenv(name, value)
     assert get_backend("s3://bucket/key")._client.meta.endpoint_url == ENDPOINT
+
+
+def _raise(exc):
+    def fail(*args, **kwargs):
+        raise exc
+    return fail
+
+
+class TestErrorTranslation:
+    def test_unknown_profile_is_an_auth_error(self):
+        with pytest.raises(ondio.AuthError):
+            AwsBackend(profile_name="nope")
+
+    @pytest.mark.parametrize("method", ["get_object", "head_object", "put_object"])
+    def test_missing_credentials_are_an_auth_error(self, prefix, monkeypatch, method):
+        backend = get_backend(f"{prefix}/k")
+        monkeypatch.setattr(backend._client, method, _raise(NoCredentialsError()))
+        call = {"get_object": lambda: backend.read_range(f"{prefix}/k", 0, 9),
+                "head_object": lambda: backend.size(f"{prefix}/k"),
+                "put_object": lambda: backend.create(f"{prefix}/k", b"x")}[method]
+        with pytest.raises(ondio.AuthError):
+            call()
+
+    @pytest.mark.parametrize("exc", [
+        EndpointConnectionError(endpoint_url="http://127.0.0.1:9"),
+        ReadTimeoutError(endpoint_url="http://127.0.0.1:9"),
+        ConnectionClosedError(endpoint_url="http://127.0.0.1:9"),
+    ])
+    def test_transport_failures_are_network_errors(self, prefix, monkeypatch, exc):
+        backend = get_backend(f"{prefix}/k")
+        monkeypatch.setattr(backend._client, "get_object", _raise(exc))
+        with pytest.raises(ondio.NetworkError) as info:
+            backend.read_range(f"{prefix}/k", 0, 9)
+        assert info.value.__cause__ is exc
+        with pytest.raises(ondio.NetworkError):
+            backend.read(f"{prefix}/k")
+
+    def test_other_botocore_error_is_an_ondio_error(self, prefix, monkeypatch):
+        backend = get_backend(f"{prefix}/k")
+        monkeypatch.setattr(backend._client, "head_object", _raise(BotoCoreError()))
+        with pytest.raises(OndioError) as info:
+            backend.size(f"{prefix}/k")
+        assert not isinstance(info.value, (ondio.AuthError, ondio.NetworkError))
+
+    def test_create_transport_failure_cannot_confirm(self, prefix, monkeypatch):
+        backend = get_backend(f"{prefix}/k")
+        monkeypatch.setattr(backend._client, "put_object",
+                            _raise(ReadTimeoutError(endpoint_url="http://x")))
+        with pytest.raises(ondio.NetworkError, match="could not confirm create"):
+            backend.create(f"{prefix}/k", b"x")
+
+    def test_read_range_past_eof_still_returns_empty(self, prefix):
+        ondio.write(f"{prefix}/k", b"0123456789")
+        assert get_backend(f"{prefix}/k").read_range(f"{prefix}/k", 50, 60) == b""

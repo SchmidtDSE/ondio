@@ -5,6 +5,7 @@ import pytest
 from ondio import (
     AuthError,
     FlacHeader,
+    NetworkError,
     ObjectNotFoundError,
     OndioError,
     UnknownPlatformError,
@@ -40,7 +41,7 @@ def test_frozen():
 
 @pytest.mark.parametrize(
     "exc",
-    [UnknownPlatformError, UnsupportedOperationError, ObjectNotFoundError, AuthError],
+    [UnknownPlatformError, UnsupportedOperationError, ObjectNotFoundError, AuthError, NetworkError],
 )
 def test_exception_hierarchy(exc):
     assert issubclass(exc, OndioError)

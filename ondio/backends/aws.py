@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
-from ondio.types import AuthError, ObjectExistsError, ObjectNotFoundError, OndioError
+from ondio.types import AuthError, NetworkError, ObjectExistsError, ObjectNotFoundError, OndioError
 
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NoSuchBucket"}
 _AUTH_CODES = {"403", "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken"}
@@ -34,12 +34,46 @@ def _from_client_error(exc, uri: str) -> OndioError:
     return OndioError(f"S3 error ({code}) for {uri}")
 
 
+def _from_botocore_error(exc, uri: str, message: str | None = None) -> OndioError:
+    """The ondio exception for a botocore error that is not a ClientError.
+
+    `message` replaces the text of a transport or other error, but not of a
+    credential error: no request was sent then.
+    """
+    from botocore.exceptions import (
+        ConnectionError as BotoConnectionError,
+        CredentialRetrievalError,
+        HTTPClientError,
+        NoCredentialsError,
+        PartialCredentialsError,
+        ProfileNotFound,
+        SSOError,
+        TokenRetrievalError,
+    )
+
+    credential_errors = (
+        NoCredentialsError,
+        PartialCredentialsError,
+        ProfileNotFound,
+        CredentialRetrievalError,
+        TokenRetrievalError,
+        SSOError,
+    )
+    if isinstance(exc, credential_errors):
+        return AuthError(f"S3 credentials failed for {uri}: {exc}")
+    message = message or f"S3 request failed for {uri}: {exc}"
+    if isinstance(exc, (BotoConnectionError, HTTPClientError)):
+        return NetworkError(message)
+    return OndioError(message)
+
+
 class AwsBackend:
     """`StorageBackend` for AWS S3 (`s3://bucket/key` URIs), via `boto3`.
 
     See [`StorageBackend`][ondio.backends.StorageBackend] for method
     semantics. Credentials resolve through `boto3`'s native chain; `botocore`
-    errors are translated into `ondio`'s exception types.
+    errors are translated into `ondio`'s exception types: credential errors
+    are `AuthError`, and connection failures and timeouts are `NetworkError`.
 
     Args:
         endpoint_url: The S3 endpoint, for a store that is not AWS (e.g. RustFS).
@@ -51,17 +85,20 @@ class AwsBackend:
     def __init__(self, endpoint_url: str | None = None, **session_kwargs):
         import boto3
 
-        self._client = boto3.Session(**session_kwargs).client("s3", endpoint_url=endpoint_url)
+        with self._translate("S3 client setup"):
+            self._client = boto3.Session(**session_kwargs).client("s3", endpoint_url=endpoint_url)
 
     @contextlib.contextmanager
     def _translate(self, uri: str):
         from boto3.exceptions import S3UploadFailedError
-        from botocore.exceptions import ClientError
+        from botocore.exceptions import BotoCoreError, ClientError
 
         try:
             yield
         except ClientError as exc:
             raise _from_client_error(exc, uri) from exc
+        except BotoCoreError as exc:
+            raise _from_botocore_error(exc, uri) from exc
         except S3UploadFailedError as exc:
             # upload_file raises this inside its `except ClientError` block
             # without `from`, so the ClientError is only on __context__
@@ -83,12 +120,12 @@ class AwsBackend:
         header = f"bytes={start_byte}-" if end_byte is None else f"bytes={start_byte}-{end_byte}"
         from botocore.exceptions import ClientError
 
-        try:
-            return self._client.get_object(Bucket=bucket, Key=key, Range=header)["Body"].read()
-        except ClientError as exc:
-            if exc.response.get("Error", {}).get("Code") == "InvalidRange":
-                return b""  # start past EOF: protocol says return the available bytes
-            with self._translate(uri):
+        with self._translate(uri):
+            try:
+                return self._client.get_object(Bucket=bucket, Key=key, Range=header)["Body"].read()
+            except ClientError as exc:
+                if exc.response.get("Error", {}).get("Code") == "InvalidRange":
+                    return b""  # start past EOF: protocol says return the available bytes
                 raise
 
     def size(self, uri: str) -> int:
@@ -115,7 +152,7 @@ class AwsBackend:
             raise _from_client_error(exc, uri) from exc
         except BotoCoreError as exc:
             # The request may have reached S3 even though no response arrived.
-            raise OndioError(f"could not confirm create for {uri}: {exc}") from exc
+            raise _from_botocore_error(exc, uri, f"could not confirm create for {uri}: {exc}") from exc
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         bucket, key = _split(uri)
