@@ -67,6 +67,12 @@ class TestReadWrite:
         with pytest.raises(UnsupportedOperationError):
             ondio.upload(URL, src)
 
+    def test_upload_without_overwrite_unsupported(self, tmp_path):
+        src = tmp_path / "src.bin"
+        src.write_bytes(b"x")
+        with pytest.raises(UnsupportedOperationError):
+            HttpBackend().upload(URL, src, overwrite=False)
+
     def test_create_unsupported(self, requests_mock):
         with pytest.raises(UnsupportedOperationError):
             ondio.create(URL, b"x")

@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import os
-import shutil 
-import tempfile
+import shutil
+import uuid
 
 from pathlib import Path
 from urllib.parse import unquote, urlparse
@@ -77,18 +77,19 @@ class LocalBackend:
             raise _wrap_oserror(uri, exc)
 
     def create(self, uri: str, data: bytes) -> None:
-        # The bytes go to a temporary file beside the target. os.link then puts it in
-        # place in one step, and fails if the target exists, so no reader sees a
-        # partial file and no existing file is replaced.
-        path = _to_path(uri)
+        self._place_new(_to_path(uri), uri, lambda stream: stream.write(data))
+
+    def _place_new(self, path: Path, uri: str, fill) -> None:
+        # `fill(stream)` writes the content to a temporary file beside the target.
+        # os.link then puts it in place in one step, and fails if the target
+        # exists, so no reader sees a partial file and no existing file is replaced.
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary = tempfile.mkstemp(
-                dir=path.parent, prefix=f".{path.name}.", suffix=".partial"
-            )
+            temporary = path.with_name(f".{path.name}.{uuid.uuid4().hex}.partial")
+            # "xb" rather than mkstemp: the new file gets the normal permissions.
             try:
-                with os.fdopen(descriptor, "wb") as stream:
-                    stream.write(data)
+                with open(temporary, "xb") as stream:
+                    fill(stream)
                     stream.flush()
                     os.fsync(stream.fileno())
                 try:
@@ -96,12 +97,11 @@ class LocalBackend:
                 except FileExistsError as exc:
                     raise ObjectExistsError(f"object already exists: {uri}") from exc
             finally:
-                os.unlink(temporary)
+                temporary.unlink(missing_ok=True)
         except PermissionError as exc:
             raise AuthError(f"permission denied: {uri}") from exc
         except OSError as exc:
             raise OndioError(f"could not create {uri}: {exc}") from exc
-
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         src = _to_path(uri)
@@ -110,11 +110,22 @@ class LocalBackend:
         with _replace_on_success(out_path) as temporary:
             shutil.copyfile(src, temporary)
 
-    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+    def upload(
+        self, uri: str, source_path: str | os.PathLike[str], *, overwrite: bool = True
+    ) -> None:
         path = _to_path(uri)
+        if not overwrite:
+            def copy(stream):
+                with open(source_path, "rb") as source:
+                    shutil.copyfileobj(source, stream)
+
+            self._place_new(path, uri, copy)
+            return
+        # The copy goes to a temporary file that replaces the target in one step,
+        # so a reader never sees a partly written file.
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(source_path, path)
+            with _replace_on_success(path) as temporary:
+                shutil.copyfile(source_path, temporary)
         except OSError as exc:
             raise _wrap_oserror(uri, exc)
 

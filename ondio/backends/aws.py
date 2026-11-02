@@ -8,9 +8,19 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
-from ondio.types import AuthError, NetworkError, ObjectExistsError, ObjectNotFoundError, OndioError
+from ondio.types import (
+    AuthError,
+    NetworkError,
+    ObjectExistsError,
+    ObjectNotFoundError,
+    OndioError,
+    UnsupportedOperationError,
+)
 
 _NOT_FOUND_CODES = {"404", "NoSuchKey", "NoSuchBucket"}
+# The largest object one PutObject can send.
+_MAX_SINGLE_PUT = 5 * 1024**3
+
 _AUTH_CODES = {"403", "AccessDenied", "InvalidAccessKeyId", "SignatureDoesNotMatch", "ExpiredToken"}
 
 
@@ -189,13 +199,16 @@ class AwsBackend:
             self._client.put_object(Bucket=bucket, Key=key, Body=data)
 
     def create(self, uri: str, data: bytes) -> None:
+        bucket, key = _split(uri)
+        self._put_if_absent(bucket, key, data, uri, "create")
+
+    def _put_if_absent(self, bucket: str, key: str, body, uri: str, action: str) -> None:
         # A conditional PUT: S3 refuses it with 412 if the key exists. A 409 means
         # another conditional write was in progress, which proves nothing.
         from botocore.exceptions import BotoCoreError, ClientError, ParamValidationError
 
-        bucket, key = _split(uri)
         try:
-            self._client.put_object(Bucket=bucket, Key=key, Body=data, IfNoneMatch="*")
+            self._client.put_object(Bucket=bucket, Key=key, Body=body, IfNoneMatch="*")
         except ClientError as exc:
             if exc.response.get("Error", {}).get("Code") == "PreconditionFailed":
                 raise ObjectExistsError(f"object already exists: {uri}") from exc
@@ -204,7 +217,7 @@ class AwsBackend:
             raise ValueError(f"invalid S3 request for {uri}") from exc
         except BotoCoreError as exc:
             # The request may have reached S3 even though no response arrived.
-            message = f"could not confirm create for {uri}: {type(exc).__name__}"
+            message = f"could not confirm {action} for {uri}: {type(exc).__name__}"
             raise _from_botocore_error(exc, uri, message) from exc
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
@@ -216,10 +229,24 @@ class AwsBackend:
         with self._translate(uri):
             self._client.download_file(bucket, key, str(dest))
 
-    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+    def upload(
+        self, uri: str, source_path: str | os.PathLike[str], *, overwrite: bool = True
+    ) -> None:
         bucket, key = _split(uri)
-        with self._translate(uri):
-            self._client.upload_file(str(source_path), bucket, key)
+        if overwrite:
+            with self._translate(uri):
+                self._client.upload_file(str(source_path), bucket, key)
+            return
+        # upload_file refuses IfNoneMatch, and its multipart uploads could not
+        # carry it, so this is one conditional PUT, which S3 limits to 5 GiB.
+        size = os.path.getsize(source_path)
+        if size > _MAX_SINGLE_PUT:
+            raise UnsupportedOperationError(
+                f"upload with overwrite=False is one PUT, limited to {_MAX_SINGLE_PUT} bytes; "
+                f"{source_path} has {size}: {uri}"
+            )
+        with open(source_path, "rb") as body:
+            self._put_if_absent(bucket, key, body, uri, "upload")
 
     def list_files(
         self,

@@ -11,6 +11,7 @@ import google.cloud.storage.exceptions  # noqa: E402
 import requests  # noqa: E402
 from google.api_core import exceptions as gexc  # noqa: E402
 
+import ondio  # noqa: E402
 from ondio import (  # noqa: E402
     AuthError,
     NetworkError,
@@ -56,7 +57,9 @@ class FakeBlob:
             raise gexc.PreconditionFailed("object exists")
         self._store[self.name] = bytes(data, "utf-8") if isinstance(data, str) else bytes(data)
 
-    def upload_from_filename(self, filename, content_type=None):
+    def upload_from_filename(self, filename, content_type=None, if_generation_match=None):
+        if if_generation_match == 0 and self.name in self._store:
+            raise gexc.PreconditionFailed("object exists")
         with open(filename, "rb") as f:
             self._store[self.name] = f.read()
 
@@ -464,3 +467,28 @@ class TestAnonymous:
     def test_anonymous_with_client_is_refused(self, store):
         with pytest.raises(ValueError, match="anonymous"):
             GcsBackend(client=FakeClient(store), anonymous=True)
+
+
+class TestUploadWithoutOverwrite:
+    def test_upload_without_overwrite_writes_a_new_object(self, tmp_path, backend):
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"first")
+        ondio.upload(f"{PREFIX}/new.bin", source, overwrite=False, backend=backend)
+        assert backend.read(f"{PREFIX}/new.bin") == b"first"
+
+    def test_upload_without_overwrite_keeps_an_existing_object(self, tmp_path, backend):
+        uri = f"{PREFIX}/old.bin"
+        backend.write(uri, b"first")
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        with pytest.raises(ObjectExistsError):
+            ondio.upload(uri, source, overwrite=False, backend=backend)
+        assert backend.read(uri) == b"first"
+
+    def test_upload_still_replaces_by_default(self, tmp_path, backend):
+        uri = f"{PREFIX}/old.bin"
+        backend.write(uri, b"first")
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        ondio.upload(uri, source, backend=backend)
+        assert backend.read(uri) == b"second"

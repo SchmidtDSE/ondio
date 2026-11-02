@@ -493,3 +493,72 @@ def test_failed_local_download_leaves_no_partial_file(tmp_path, monkeypatch):
         ondio.download(str(src), dest)
     assert dest.read_bytes() == b"older copy"
     assert [p.name for p in out.iterdir()] == ["a.bin"]
+
+
+class TestUploadWithoutOverwrite:
+    def test_upload_without_overwrite_writes_a_new_object(self, tmp_path):
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"first")
+        ondio.upload(str(tmp_path / "out" / "new.bin"), source, overwrite=False)
+        assert ondio.read(str(tmp_path / "out" / "new.bin")) == b"first"
+
+    def test_upload_without_overwrite_keeps_an_existing_object(self, tmp_path):
+        uri = str(tmp_path / "out" / "old.bin")
+        ondio.write(uri, b"first")
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        with pytest.raises(ObjectExistsError):
+            ondio.upload(uri, source, overwrite=False)
+        assert ondio.read(uri) == b"first"
+
+    def test_upload_still_replaces_by_default(self, tmp_path):
+        uri = str(tmp_path / "out" / "old.bin")
+        ondio.write(uri, b"first")
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        ondio.upload(uri, source)
+        assert ondio.read(uri) == b"second"
+
+    def test_refused_local_upload_leaves_no_temporary_file(self, tmp_path):
+        target = tmp_path / "out" / "x.bin"
+        ondio.write(str(target), b"first")
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        with pytest.raises(ObjectExistsError):
+            ondio.upload(str(target), source, overwrite=False)
+        assert sorted(p.name for p in target.parent.iterdir()) == ["x.bin"]
+
+    def test_local_upload_replaces_without_a_partial_file(self, tmp_path, monkeypatch):
+        # The target is never opened for writing: the content reaches it by os.replace.
+        target = tmp_path / "x.bin"
+        target.write_bytes(b"first")
+        replaced = []
+        real = os.replace
+        monkeypatch.setattr(os, "replace", lambda a, b: replaced.append(Path(b)) or real(a, b))
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        ondio.upload(str(target), source)
+        assert target.read_bytes() == b"second" and replaced == [target]
+        assert sorted(p.name for p in tmp_path.iterdir()) == ["src.bin", "x.bin"]
+
+    def test_upload_passes_overwrite_only_when_it_is_false(self, tmp_path):
+        class OldBackend(LocalBackend):
+            def upload(self, uri, source_path):  # a backend written before `overwrite`
+                super().upload(uri, source_path)
+
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"x")
+        ondio.upload(str(tmp_path / "y.bin"), source, backend=OldBackend())
+        assert (tmp_path / "y.bin").read_bytes() == b"x"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX file modes")
+def test_new_files_get_the_normal_permissions(tmp_path):
+    reference = tmp_path / "written.bin"
+    ondio.write(str(reference), b"x")
+    source = tmp_path / "src.bin"
+    source.write_bytes(b"x")
+    ondio.create(str(tmp_path / "created.bin"), b"x")
+    ondio.upload(str(tmp_path / "uploaded.bin"), source, overwrite=False)
+    for name in ("created.bin", "uploaded.bin"):
+        assert (tmp_path / name).stat().st_mode == reference.stat().st_mode

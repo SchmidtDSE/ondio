@@ -511,3 +511,48 @@ class TestAnonymous:
         monkeypatch.setattr("boto3.Session", lambda **kw: calls.append(kw) or _FakeSession())
         AwsBackend(anonymous=False, profile_name="p")
         assert calls == [{"profile_name": "p"}]
+
+
+class TestUploadWithoutOverwrite:
+    def test_upload_without_overwrite_writes_a_new_object(self, tmp_path, prefix):
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"first")
+        ondio.upload(f"{prefix}/new.bin", source, overwrite=False)
+        assert ondio.read(f"{prefix}/new.bin") == b"first"
+
+    def test_upload_without_overwrite_keeps_an_existing_object(self, tmp_path, prefix):
+        uri = f"{prefix}/old.bin"
+        ondio.write(uri, b"first")
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        with pytest.raises(ObjectExistsError):
+            ondio.upload(uri, source, overwrite=False)
+        assert ondio.read(uri) == b"first"
+
+    def test_upload_still_replaces_by_default(self, tmp_path, prefix):
+        uri = f"{prefix}/old.bin"
+        ondio.write(uri, b"first")
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"second")
+        ondio.upload(uri, source)
+        assert ondio.read(uri) == b"second"
+
+    def test_upload_without_overwrite_refuses_a_file_over_the_put_limit(self, tmp_path, prefix, monkeypatch):
+        monkeypatch.setattr("ondio.backends.aws._MAX_SINGLE_PUT", 4)
+        source = tmp_path / "big.bin"
+        source.write_bytes(b"12345")
+        with pytest.raises(ondio.UnsupportedOperationError, match="4"):
+            ondio.upload(f"{prefix}/big.bin", source, overwrite=False)
+        assert not ondio.exists(f"{prefix}/big.bin")
+
+    def test_upload_without_overwrite_sends_one_conditional_put(self, tmp_path, prefix, monkeypatch):
+        backend = get_backend(f"{prefix}/k")
+        sent = []
+        real = backend._client.put_object
+        monkeypatch.setattr(backend._client, "put_object", lambda **kw: sent.append(kw) or real(**kw))
+        monkeypatch.setattr(backend._client, "upload_file", _raise(AssertionError("upload_file")))
+        source = tmp_path / "src.bin"
+        source.write_bytes(b"x")
+        ondio.upload(f"{prefix}/k", source, overwrite=False, backend=backend)
+        assert len(sent) == 1
+        assert sent[0]["IfNoneMatch"] == "*" and not isinstance(sent[0]["Body"], bytes)

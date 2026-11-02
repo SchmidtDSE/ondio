@@ -225,7 +225,9 @@ class HttpBackend:
     def create(self, uri: str, data: bytes) -> None:
         raise UnsupportedOperationError(f"create is not supported over HTTP: {uri}")
 
-    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+    def upload(
+        self, uri: str, source_path: str | os.PathLike[str], *, overwrite: bool = True
+    ) -> None:
         raise UnsupportedOperationError(f"upload is not supported over HTTP: {uri}")
 
     def list_files(

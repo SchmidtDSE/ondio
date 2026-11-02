@@ -264,17 +264,22 @@ def upload(
     uri: str,
     source_path: str | os.PathLike[str],
     *,
+    overwrite: bool = True,
     backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> None:
     """Upload a local file to `uri`, streaming it from disk.
 
     The file is sent without being read into memory. An existing object at
-    `uri` is replaced.
+    `uri` is replaced, unless `overwrite=False`: the file is then written only
+    if no object exists there, in one request, and a reader sees either no
+    object or the complete one. Supported on S3, GCS, and local disk. On S3 it
+    is a single PUT, so the file can be at most 5 GiB.
 
     Args:
         uri: Fully-qualified storage URI to write to.
         source_path: Local file to upload.
+        overwrite: Replace an existing object. `False` refuses to.
         backend: A backend to use instead of one built from `uri` and `kwargs`.
             Build it once and pass it to many calls to reuse its client and
             connections.
@@ -282,12 +287,25 @@ def upload(
 
     Raises:
         FileNotFoundError: If `source_path` is not an existing file.
+        ObjectExistsError: With `overwrite=False`, if an object exists at `uri`.
+            It is not changed. On S3 and GCS it can be the object that this call
+            wrote, if the client retried after a lost response: compare its
+            bytes to know who wrote it.
+        UnsupportedOperationError: Over HTTP, or with `overwrite=False` for a
+            file larger than 5 GiB on S3.
+        OndioError: For any other failure. With `overwrite=False` this does not
+            prove that nothing was written: read `uri` to find out.
     """
     # _resolve also refuses options, but a ValueError must come before a FileNotFoundError.
     _refuse_options(backend, kwargs)
     if not Path(source_path).is_file():
         raise FileNotFoundError(f"no such file to upload: {source_path}")
-    _resolve(uri, backend, kwargs).upload(uri, source_path)
+    resolved = _resolve(uri, backend, kwargs)
+    # Only when asked: a backend written before `overwrite` existed still works.
+    if overwrite:
+        resolved.upload(uri, source_path)
+    else:
+        resolved.upload(uri, source_path, overwrite=False)
     printer.message(f"uploaded {source_path} to {uri}")
 
 

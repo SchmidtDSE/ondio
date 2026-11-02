@@ -169,6 +169,14 @@ class GcsBackend:
 
     def create(self, uri: str, data: bytes) -> None:
         # A conditional upload: GCS refuses it with 412 if the object exists.
+        with self._if_absent(uri, "create"):
+            self._blob(uri).upload_from_string(
+                data, content_type="application/octet-stream", if_generation_match=0
+            )
+
+    @contextlib.contextmanager
+    def _if_absent(self, uri: str, action: str):
+        """Translate the errors of an upload made with `if_generation_match=0`."""
         import requests
         from google.api_core import exceptions as gexc
         from google.auth.exceptions import RefreshError
@@ -176,9 +184,7 @@ class GcsBackend:
 
         with self._translate(uri):
             try:
-                self._blob(uri).upload_from_string(
-                    data, content_type="application/octet-stream", if_generation_match=0
-                )
+                yield
             except gexc.PreconditionFailed as exc:
                 # must be caught before _translate sees it: it subclasses
                 # GoogleAPICallError and would become a plain OndioError
@@ -188,11 +194,11 @@ class GcsBackend:
             except _transport_errors() as exc:
                 # The request may have reached GCS even though no response arrived.
                 raise NetworkError(
-                    f"could not confirm create for {uri}: {type(exc).__name__}"
+                    f"could not confirm {action} for {uri}: {type(exc).__name__}"
                 ) from exc
             except requests.exceptions.RequestException as exc:
                 raise OndioError(
-                    f"could not confirm create for {uri}: {type(exc).__name__}"
+                    f"could not confirm {action} for {uri}: {type(exc).__name__}"
                 ) from exc
             except DataCorruption as exc:
                 # The client tries to delete the object before it raises this.
@@ -203,10 +209,19 @@ class GcsBackend:
         with _replace_on_success(out_path) as temporary, self._translate(uri):
             self._blob(uri).download_to_filename(str(temporary))
 
-    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
-        with self._translate(uri):
+    def upload(
+        self, uri: str, source_path: str | os.PathLike[str], *, overwrite: bool = True
+    ) -> None:
+        if overwrite:
+            with self._translate(uri):
+                self._blob(uri).upload_from_filename(
+                    str(source_path), content_type="application/octet-stream"
+                )
+            return
+        # A conditional upload: GCS refuses it with 412 if the object exists.
+        with self._if_absent(uri, "upload"):
             self._blob(uri).upload_from_filename(
-                str(source_path), content_type="application/octet-stream"
+                str(source_path), content_type="application/octet-stream", if_generation_match=0
             )
 
     def list_files(

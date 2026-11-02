@@ -160,20 +160,31 @@ class StorageBackend(Protocol):
         """
         ...
 
-    def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
+    def upload(
+        self, uri: str, source_path: str | os.PathLike[str], *, overwrite: bool = True
+    ) -> None:
         """Send a local file to a URI without reading it into memory.
 
-        An existing object at `uri` is replaced.
+        With `overwrite=True` an existing object at `uri` is replaced. With
+        `overwrite=False` the file is written only if no object exists there, as
+        `create` writes bytes. The dispatcher passes `overwrite` only when it is
+        `False`, so a backend that never supports that need not accept it.
 
         Args:
             uri: Destination URI.
             source_path: Local file to send.
+            overwrite: Replace an existing object. `False` refuses to.
 
         Raises:
+            ObjectExistsError: With `overwrite=False`, if an object exists at
+                `uri`. It is not changed. On S3 and GCS it can be the object that
+                this call wrote, if the client retried after a lost response.
             ObjectNotFoundError: If the destination's bucket does not exist.
             AuthError: If access to the destination is denied.
-            UnsupportedOperationError: If the backend cannot write.
-            OndioError: For any other storage error, as `write` raises.
+            UnsupportedOperationError: If the backend cannot write, or cannot
+                write this file only if no object exists.
+            OndioError: For any other storage error, as `write` raises. With
+                `overwrite=False` this does not prove that nothing was written.
         """
         ...
 
