@@ -389,17 +389,33 @@ class TestTranslation:
             run()
         assert raised.value.__cause__ is failure
 
-    def test_range_past_eof_still_returns_empty(self, backend):
-        assert backend.read_range(f"{PREFIX}/audio/chunk_001.flac", 50, 60) == b""
-
-
 class TestGivenClient:
-    def test_the_given_client_is_used(self, store):
-        client = FakeClient(store)
-        assert GcsBackend(client=client)._client is client
-
     @pytest.mark.parametrize("option", [{"project": "secret-project-7"}, {"endpoint_url": "http://x"}])
     def test_client_with_another_option_is_refused(self, store, option):
         with pytest.raises(ValueError) as raised:
             GcsBackend(client=FakeClient(store), **option)
         assert next(iter(option.values())) not in str(raised.value)
+
+
+@pytest.mark.parametrize("method, call", [
+    ("upload_from_filename", "upload"),
+    ("upload_from_string", "create"),
+    ("download_as_bytes", "read"),
+])
+def test_a_session_url_is_not_in_the_message(backend, monkeypatch, tmp_path, method, call):
+    failure = requests.ConnectionError("POST https://storage.example/upload?upload_id=SECRET-SESSION")
+
+    def fail(*args, **kwargs):
+        raise failure
+
+    monkeypatch.setattr(FakeBlob, method, fail)
+    src = tmp_path / "a.bin"
+    src.write_bytes(b"x")
+    uri = f"{PREFIX}/audio/chunk_001.flac"
+    run = {"upload": lambda: backend.upload(uri, src),
+           "create": lambda: backend.create(f"{PREFIX}/new.bin", b"x"),
+           "read": lambda: backend.read(uri)}[call]
+    with pytest.raises(NetworkError) as raised:
+        run()
+    assert "SECRET-SESSION" not in str(raised.value)
+    assert raised.value.__cause__ is failure

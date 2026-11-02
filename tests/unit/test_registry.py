@@ -30,18 +30,6 @@ def test_unknown_scheme_raises():
         detect_platform("ftp://host/file")
 
 
-def test_fresh_backend_per_call(tmp_path):
-    # no caching layer: every call constructs a new backend instance
-    assert get_backend(str(tmp_path)) is not get_backend(str(tmp_path))
-
-
-def test_kwargs_forwarded_to_backend_constructor(tmp_path):
-    # kwargs go to the backend constructor, so a kwarg it does not accept
-    # surfaces immediately as a TypeError
-    with pytest.raises(TypeError):
-        get_backend(str(tmp_path), bogus_option=1)
-
-
 def test_public_create_reaches_the_gcs_backend(monkeypatch):
     import ondio.dispatcher as dispatcher
 

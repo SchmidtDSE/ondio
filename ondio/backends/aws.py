@@ -59,9 +59,10 @@ def _from_botocore_error(exc, uri: str, message: str | None = None) -> OndioErro
         TokenRetrievalError,
         SSOError,
     )
+    # The SDK's text can hold a credential process's output, so name only the type.
     if isinstance(exc, credential_errors):
-        return AuthError(f"S3 credentials failed for {uri}: {exc}")
-    message = message or f"S3 request failed for {uri}: {exc}"
+        return AuthError(f"S3 credentials failed for {uri}: {type(exc).__name__}")
+    message = message or f"S3 request failed for {uri}: {type(exc).__name__}"
     if isinstance(exc, (BotoConnectionError, HTTPClientError)):
         return NetworkError(message)
     return OndioError(message)
@@ -102,7 +103,11 @@ class AwsBackend:
 
     @contextlib.contextmanager
     def _translate(self, uri: str):
-        from boto3.exceptions import S3UploadFailedError
+        from boto3.exceptions import (
+            RetriesExceededError,
+            S3TransferFailedError,
+            S3UploadFailedError,
+        )
         from botocore.exceptions import BotoCoreError, ClientError
 
         try:
@@ -111,6 +116,11 @@ class AwsBackend:
             raise _from_client_error(exc, uri) from exc
         except BotoCoreError as exc:
             raise _from_botocore_error(exc, uri) from exc
+        except RetriesExceededError as exc:
+            # download_file raises this when its retries of a broken read run out.
+            raise NetworkError(f"S3 request failed for {uri}: {type(exc).__name__}") from exc
+        except S3TransferFailedError as exc:
+            raise OndioError(f"S3 transfer failed for {uri}") from exc
         except S3UploadFailedError as exc:
             # upload_file raises this inside its `except ClientError` block
             # without `from`, so the ClientError is only on __context__
@@ -164,7 +174,8 @@ class AwsBackend:
             raise _from_client_error(exc, uri) from exc
         except BotoCoreError as exc:
             # The request may have reached S3 even though no response arrived.
-            raise _from_botocore_error(exc, uri, f"could not confirm create for {uri}: {exc}") from exc
+            message = f"could not confirm create for {uri}: {type(exc).__name__}"
+            raise _from_botocore_error(exc, uri, message) from exc
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         bucket, key = _split(uri)

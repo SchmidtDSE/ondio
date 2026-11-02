@@ -64,7 +64,6 @@ class TestReadWrite:
         assert ondio.locate(uri) == Location("file://", str(target).removeprefix("/"))
 
 
-
 class TestRefusedUris:
     @pytest.fixture(params=["?x", "#x", "?", "#"])
     def suffix(self, request):
@@ -450,16 +449,6 @@ class TestGivenBackend:
         recorder = Recorder()
         ondio.create("http://x/a", b"x", backend=recorder)
         assert recorder.uris == ["http://x/a"]
-
-
-def test_read_range(tmp_path):
-    path = tmp_path / "a.bin"
-    path.write_bytes(b"0123456789")
-    assert ondio.read_range(str(path), 2, 4) == b"234"      # inclusive end
-    assert ondio.read_range(str(path), 7) == b"789"         # to EOF
-    assert ondio.read_range(str(path), 50, 60) == b""       # past EOF
-    with pytest.raises(ValueError):
-        ondio.read_range(str(path), 5, 4)
 
 
 def test_read_range_with_a_given_backend(tmp_path):

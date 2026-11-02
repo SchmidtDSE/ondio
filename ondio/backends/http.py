@@ -108,14 +108,20 @@ class HttpBackend:
         except exceptions.RequestException as exc:
             raise OndioError(f"HTTP request failed for {uri}: {type(exc).__name__}") from exc
 
+    # verify is also passed per request: requests replaces session.verify with
+    # REQUESTS_CA_BUNDLE or CURL_CA_BUNDLE when either is set.
     def _get(self, uri: str, **kwargs):
         return self._session.get(
-            uri, timeout=self._timeout, allow_redirects=self._allow_redirects, **kwargs
+            uri,
+            timeout=self._timeout,
+            allow_redirects=self._allow_redirects,
+            verify=self._verify,
+            **kwargs,
         )
 
     def _head(self, uri: str):
         return self._session.head(
-            uri, timeout=self._timeout, allow_redirects=self._allow_redirects
+            uri, timeout=self._timeout, allow_redirects=self._allow_redirects, verify=self._verify
         )
 
     def _check_status(self, uri: str, response) -> None:

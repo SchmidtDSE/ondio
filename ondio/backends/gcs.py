@@ -88,13 +88,15 @@ class GcsBackend:
             raise AuthError(f"access denied: {uri}") from exc
         except gexc.GoogleAPICallError as exc:
             raise OndioError(f"GCS error for {uri}: {exc}") from exc
+        # These messages name only the type: the SDK's text can hold a request URL,
+        # and an upload URL carries an upload_id that grants write access.
         except (DefaultCredentialsError, RefreshError) as exc:
-            raise AuthError(f"GCS credentials failed for {uri}: {exc}") from exc
+            raise AuthError(f"GCS credentials failed for {uri}: {type(exc).__name__}") from exc
         except _transport_errors() as exc:
             # Includes RetryError: a GoogleAPIError that the GoogleAPICallError clause misses.
-            raise NetworkError(f"GCS request failed for {uri}: {exc}") from exc
+            raise NetworkError(f"GCS request failed for {uri}: {type(exc).__name__}") from exc
         except (InvalidResponse, DataCorruption, requests.RequestException) as exc:
-            raise OndioError(f"GCS error for {uri}: {exc}") from exc
+            raise OndioError(f"GCS error for {uri}: {type(exc).__name__}") from exc
 
     def _blob(self, uri: str):
         bucket, key = _split(uri)
@@ -152,9 +154,13 @@ class GcsBackend:
                 raise AuthError(f"could not refresh GCS credentials: {uri}") from exc
             except _transport_errors() as exc:
                 # The request may have reached GCS even though no response arrived.
-                raise NetworkError(f"could not confirm create for {uri}: {exc}") from exc
+                raise NetworkError(
+                    f"could not confirm create for {uri}: {type(exc).__name__}"
+                ) from exc
             except requests.exceptions.RequestException as exc:
-                raise OndioError(f"could not confirm create for {uri}: {exc}") from exc
+                raise OndioError(
+                    f"could not confirm create for {uri}: {type(exc).__name__}"
+                ) from exc
             except DataCorruption as exc:
                 # The client tries to delete the object before it raises this.
                 raise OndioError(f"GCS checksum mismatch for {uri}") from exc

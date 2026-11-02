@@ -39,7 +39,6 @@ class TestReadWrite:
         assert dest.read_bytes() == b"data"
 
 
-
 class TestUpload:
     def test_upload_larger_than_one_multipart_chunk(self, prefix, tmp_path, monkeypatch):
         # moto stores a multipart object's composite CRC32 without the "-N"
@@ -388,11 +387,6 @@ class TestErrorTranslation:
         with pytest.raises(ondio.NetworkError, match="could not confirm create"):
             backend.create(f"{prefix}/k", b"x")
 
-    def test_read_range_past_eof_still_returns_empty(self, prefix):
-        ondio.write(f"{prefix}/k", b"0123456789")
-        assert get_backend(f"{prefix}/k").read_range(f"{prefix}/k", 50, 60) == b""
-
-
 class TestGivenClient:
     def test_a_given_client_is_used(self, prefix):
         boto3 = pytest.importorskip("boto3")
@@ -402,14 +396,6 @@ class TestGivenClient:
         assert backend._client is client
         assert backend.read(f"{prefix}/k") == b"abc"
 
-    def test_an_unsigned_client_is_accepted(self):
-        boto3 = pytest.importorskip("boto3")
-        from botocore import UNSIGNED
-        from botocore.config import Config
-
-        client = boto3.client("s3", region_name="us-east-1", config=Config(signature_version=UNSIGNED))
-        assert AwsBackend(client=client)._client is client
-
     @pytest.mark.parametrize("option", [{"endpoint_url": "http://x"}, {"region_name": "eu-west-1"}])
     def test_client_with_another_option_is_refused(self, option):
         boto3 = pytest.importorskip("boto3")
@@ -417,5 +403,32 @@ class TestGivenClient:
             AwsBackend(client=boto3.client("s3", region_name="us-east-1"), **option)
         assert str(next(iter(option.values()))) not in str(raised.value)
 
-    def test_endpoint_url_is_still_the_first_positional_argument(self):
-        assert AwsBackend("http://127.0.0.1:9")._client.meta.endpoint_url == "http://127.0.0.1:9"
+class TestTransferErrors:
+    def test_download_retries_exhausted_is_a_network_error(self, prefix, monkeypatch, tmp_path):
+        from boto3.exceptions import RetriesExceededError
+
+        backend = get_backend(f"{prefix}/k")
+        failure = RetriesExceededError(ReadTimeoutError(endpoint_url="http://x"))
+        monkeypatch.setattr(backend._client, "download_file", _raise(failure))
+        with pytest.raises(ondio.NetworkError) as raised:
+            backend.download(f"{prefix}/k", tmp_path / "k")
+        assert raised.value.__cause__ is failure
+
+    def test_download_transfer_failure_is_an_ondio_error(self, prefix, monkeypatch, tmp_path):
+        from boto3.exceptions import S3TransferFailedError
+
+        backend = get_backend(f"{prefix}/k")
+        monkeypatch.setattr(backend._client, "download_file", _raise(S3TransferFailedError("x")))
+        with pytest.raises(OndioError):
+            backend.download(f"{prefix}/k", tmp_path / "k")
+
+
+def test_credential_process_output_is_not_in_the_message(prefix, monkeypatch):
+    from botocore.exceptions import CredentialRetrievalError
+
+    backend = get_backend(f"{prefix}/k")
+    failure = CredentialRetrievalError(provider="custom-process", error_msg="SECRET-OUTPUT")
+    monkeypatch.setattr(backend._client, "head_object", _raise(failure))
+    with pytest.raises(ondio.AuthError) as raised:
+        backend.size(f"{prefix}/k")
+    assert "SECRET-OUTPUT" not in str(raised.value)

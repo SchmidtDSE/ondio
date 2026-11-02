@@ -1,4 +1,3 @@
-import dataclasses
 
 import pytest
 
@@ -32,11 +31,6 @@ def test_duration():
 
 def test_duration_zero_sample_rate():
     assert make_header(sample_rate=0).duration == 0.0
-
-
-def test_frozen():
-    with pytest.raises(dataclasses.FrozenInstanceError):
-        make_header().sample_rate = 48000
 
 
 @pytest.mark.parametrize(

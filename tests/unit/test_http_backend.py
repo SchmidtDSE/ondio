@@ -169,7 +169,7 @@ class TestFailures:
                 call()
             assert isinstance(raised.value.__cause__, exc)
 
-    def test_failure_while_reading_the_body_is_an_ondio_error(self, requests_mock, tmp_path):
+    def test_other_request_error_is_an_ondio_error(self, requests_mock, tmp_path):
         requests_mock.get(URL, exc=requests.exceptions.ChunkedEncodingError)
         with pytest.raises(ondio.OndioError):
             HttpBackend().download(URL, tmp_path / "a.bin")
@@ -310,3 +310,15 @@ def test_read_range_with_options(requests_mock):
     assert ondio.read_range(URL, 0, 2, headers={"X-A": "1"}) == b"012"
     assert requests_mock.last_request.headers["X-A"] == "1"
     assert requests_mock.last_request.headers["Range"] == "bytes=0-2"
+
+
+@pytest.mark.parametrize("verify", [False, "/my-ca.pem"])
+def test_verify_wins_over_the_environment_bundle(requests_mock, monkeypatch, verify):
+    monkeypatch.setenv("REQUESTS_CA_BUNDLE", "/env-bundle.pem")
+    monkeypatch.setenv("CURL_CA_BUNDLE", "/env-bundle.pem")
+    requests_mock.get(URL, content=CONTENT)
+    requests_mock.head(URL, headers={"Content-Length": "10"})
+    backend = HttpBackend(verify=verify)
+    backend.read(URL)
+    backend.size(URL)
+    assert [r.verify for r in requests_mock.request_history] == [verify, verify]
