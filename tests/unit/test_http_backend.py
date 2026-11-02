@@ -7,10 +7,12 @@ import pytest
 import soundfile as sf
 
 pytest.importorskip("requests_mock")
+import requests  # noqa: E402
 
 import ondio  # noqa: E402
 from ondio import AuthError, ObjectNotFoundError, UnsupportedOperationError  # noqa: E402
 from ondio.registry import get_backend  # noqa: E402
+from ondio.backends.http import HttpBackend  # noqa: E402
 
 URL = "http://files.example.com/a.bin"
 CONTENT = b"0123456789"
@@ -150,3 +152,68 @@ class TestReadFlac:
             ondio.read_flac(FLAC_URL, 2.0, 4.0, use_range=False)
         # … while whole-file reads never touch the header and still work
         assert ondio.read_flac(FLAC_URL, decode=False) == flac_bytes
+
+
+class TestFailures:
+    @pytest.mark.parametrize("exc", [requests.exceptions.ConnectTimeout,
+                                     requests.exceptions.ReadTimeout,
+                                     requests.exceptions.ConnectionError])
+    def test_transport_failures_are_network_errors(self, requests_mock, exc):
+        requests_mock.get(URL, exc=exc)
+        requests_mock.head(URL, exc=exc)
+        backend = HttpBackend()
+        for call in (lambda: backend.read(URL), lambda: backend.exists(URL),
+                     lambda: backend.read_range(URL, 0, 1), lambda: backend.size(URL)):
+            with pytest.raises(ondio.NetworkError) as raised:
+                call()
+            assert isinstance(raised.value.__cause__, exc)
+
+    def test_failure_while_reading_the_body_is_an_ondio_error(self, requests_mock, tmp_path):
+        requests_mock.get(URL, exc=requests.exceptions.ChunkedEncodingError)
+        with pytest.raises(ondio.OndioError):
+            HttpBackend().download(URL, tmp_path / "a.bin")
+
+    def test_body_loop_failure_is_translated(self, requests_mock, tmp_path):
+        class Body(io.RawIOBase):
+            def readinto(self, buffer):
+                raise requests.exceptions.ChunkedEncodingError("cut off")
+
+        requests_mock.get(URL, body=Body())
+        with pytest.raises(ondio.OndioError):
+            HttpBackend().download(URL, tmp_path / "a.bin")
+
+    @pytest.mark.parametrize("url", ["http://", "http://exa mple.com:x/a"])
+    def test_bad_url_is_a_value_error(self, url):
+        with pytest.raises(ValueError) as raised:
+            HttpBackend().read(url)
+        assert not isinstance(raised.value, ondio.OndioError)
+
+
+class TestTimeout:
+    def test_default_timeout_on_every_request(self, requests_mock, tmp_path):
+        serve_with_ranges(requests_mock, URL, CONTENT)
+        requests_mock.head(URL, headers={"Content-Length": "10"})
+        backend = HttpBackend()
+        backend.read(URL)
+        backend.read_range(URL, 0, 1)
+        backend.size(URL)
+        backend.exists(URL)
+        backend.download(URL, tmp_path / "a.bin")
+        assert len(requests_mock.request_history) == 5
+        assert all(r.timeout == (10, 60) for r in requests_mock.request_history)
+
+    def test_exists_fallback_get_has_the_timeout(self, requests_mock):
+        requests_mock.head(URL, status_code=405)
+        requests_mock.get(URL, content=CONTENT)
+        HttpBackend(timeout=3).exists(URL)
+        assert [r.timeout for r in requests_mock.request_history] == [3, 3]
+
+    def test_timeout_option(self, requests_mock):
+        requests_mock.get(URL, content=CONTENT)
+        get_backend(URL, timeout=5).read(URL)
+        assert requests_mock.last_request.timeout == 5
+
+    def test_no_timeout(self, requests_mock):
+        requests_mock.get(URL, content=CONTENT)
+        HttpBackend(timeout=None).read(URL)
+        assert requests_mock.last_request.timeout is None

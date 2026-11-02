@@ -7,11 +7,18 @@ header (206) and refuses to pass off a full-body 200 as a range.
 
 from __future__ import annotations
 
+import contextlib
 import os
 import threading
 from pathlib import Path
 
-from ondio.types import AuthError, ObjectNotFoundError, OndioError, UnsupportedOperationError
+from ondio.types import (
+    AuthError,
+    NetworkError,
+    ObjectNotFoundError,
+    OndioError,
+    UnsupportedOperationError,
+)
 
 _CHUNK = 1024 * 1024
 
@@ -24,9 +31,18 @@ class HttpBackend:
     `object_count`, and `delete` raise `UnsupportedOperationError` —
     infeasible over plain HTTP. `read_range` verifies the server honored the
     `Range` header (206) and refuses to pass off a full-body 200 as a range.
+
+    `requests` errors are translated: a bad URL is `ValueError`, a connection
+    failure or timeout is `NetworkError`, and any other is `OndioError`.
+
+    Args:
+        timeout: Seconds to wait, as `requests` takes it: one number, or a
+            `(connect, read)` pair. The read timeout limits each wait for data,
+            not the whole request, so a server that keeps sending slowly is not
+            stopped by it. `None` waits with no limit.
     """
 
-    def __init__(self):
+    def __init__(self, *, timeout: float | tuple[float, float] | None = (10, 60)):
         try:
             import requests
         except ImportError as exc:
@@ -34,6 +50,7 @@ class HttpBackend:
                 "http(s):// support requires the 'http' extra: pip install ondio[http]"
             ) from exc
         self._requests = requests
+        self._timeout = timeout
         self._local = threading.local()  # requests.Session is not thread-safe
 
     @property
@@ -42,6 +59,24 @@ class HttpBackend:
         if session is None:
             session = self._local.session = self._requests.Session()
         return session
+
+    @contextlib.contextmanager
+    def _translate(self, uri: str):
+        exceptions = self._requests.exceptions
+        try:
+            yield
+        except (exceptions.InvalidURL, exceptions.MissingSchema, exceptions.InvalidSchema):
+            raise  # already ValueErrors: a bad request, not a failed fetch
+        except (exceptions.ConnectionError, exceptions.Timeout) as exc:
+            raise NetworkError(f"HTTP request failed for {uri}: {type(exc).__name__}") from exc
+        except exceptions.RequestException as exc:
+            raise OndioError(f"HTTP request failed for {uri}: {type(exc).__name__}") from exc
+
+    def _get(self, uri: str, **kwargs):
+        return self._session.get(uri, timeout=self._timeout, **kwargs)
+
+    def _head(self, uri: str):
+        return self._session.head(uri, timeout=self._timeout, allow_redirects=True)
 
     def _check_status(self, uri: str, response) -> None:
         if response.status_code == 404:
@@ -52,7 +87,8 @@ class HttpBackend:
             raise OndioError(f"HTTP {response.status_code} for {uri}")
 
     def read(self, uri: str) -> bytes:
-        response = self._session.get(uri)
+        with self._translate(uri):
+            response = self._get(uri)
         self._check_status(uri, response)
         return response.content
 
@@ -62,7 +98,8 @@ class HttpBackend:
         if end_byte is not None and end_byte < start_byte:
             raise ValueError(f"end_byte {end_byte} < start_byte {start_byte}")
         header = f"bytes={start_byte}-" if end_byte is None else f"bytes={start_byte}-{end_byte}"
-        response = self._session.get(uri, headers={"Range": header})
+        with self._translate(uri):
+            response = self._get(uri, headers={"Range": header})
         if response.status_code == 416:
             return b""  # start past EOF: protocol says return the available bytes
         if response.status_code == 200:
@@ -75,7 +112,8 @@ class HttpBackend:
         return response.content
 
     def size(self, uri: str) -> int:
-        response = self._session.head(uri, allow_redirects=True)
+        with self._translate(uri):
+            response = self._head(uri)
         self._check_status(uri, response)
         length = response.headers.get("Content-Length")
         if length is None:
@@ -85,16 +123,17 @@ class HttpBackend:
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
         dest = Path(out_path)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        with self._session.get(uri, stream=True) as response:
+        with self._translate(uri), self._get(uri, stream=True) as response:
             self._check_status(uri, response)
             with open(dest, "wb") as f:
                 for chunk in response.iter_content(_CHUNK):
                     f.write(chunk)
 
     def exists(self, uri: str) -> bool:
-        response = self._session.head(uri, allow_redirects=True)
+        with self._translate(uri):
+            response = self._head(uri)
         if response.status_code in (405, 501):  # server does not support HEAD
-            with self._session.get(uri, stream=True) as get_response:
+            with self._translate(uri), self._get(uri, stream=True) as get_response:
                 if get_response.status_code == 404:
                     return False
                 self._check_status(uri, get_response)
