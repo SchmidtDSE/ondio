@@ -9,6 +9,7 @@ Everything here is importable from `ondio` itself, for example `ondio.read` or
       show_submodules: false
       members:
         - read
+        - read_range
         - write
         - create
         - read_json

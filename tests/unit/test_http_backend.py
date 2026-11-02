@@ -303,3 +303,10 @@ class TestOptions:
             with pytest.raises(ondio.OndioError) as raised:
                 call()
             assert TOKEN not in str(raised.value)
+
+
+def test_read_range_with_options(requests_mock):
+    serve_with_ranges(requests_mock, URL, CONTENT)
+    assert ondio.read_range(URL, 0, 2, headers={"X-A": "1"}) == b"012"
+    assert requests_mock.last_request.headers["X-A"] == "1"
+    assert requests_mock.last_request.headers["Range"] == "bytes=0-2"

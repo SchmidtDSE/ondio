@@ -58,6 +58,44 @@ def read(uri: str, *, backend: StorageBackend | None = None, **kwargs: Any) -> b
     return _resolve(uri, backend, kwargs).read(uri)
 
 
+def read_range(
+    uri: str,
+    start_byte: int,
+    end_byte: int | None = None,
+    *,
+    backend: StorageBackend | None = None,
+    **kwargs: Any,
+) -> bytes:
+    """Read the bytes from `start_byte` to `end_byte` (inclusive) of the object at `uri`.
+
+    The range rules are those of
+    [`StorageBackend.read_range`][ondio.backends.StorageBackend.read_range]:
+    `end_byte=None` reads to the end, and a range past the end returns the
+    bytes that exist, possibly none.
+
+    Returns the stored bytes, not a playable file. For a time window of a FLAC
+    file, use [`read_flac`][ondio.dispatcher.read_flac].
+
+    Args:
+        uri: Fully-qualified storage URI.
+        start_byte: First byte to read (>= 0).
+        end_byte: Last byte to read (inclusive); `None` means to the end.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
+        **kwargs: Forwarded to the backend constructor.
+
+    Returns:
+        The bytes of the range.
+
+    Raises:
+        ValueError: If the range is negative or inverted.
+        UnsupportedOperationError: If the backend cannot read a range, e.g. an
+            HTTP server that ignores `Range`.
+    """
+    return _resolve(uri, backend, kwargs).read_range(uri, start_byte, end_byte)
+
+
 def download(
     uri: str,
     out_path: str | os.PathLike[str],
