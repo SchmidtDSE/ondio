@@ -8,7 +8,7 @@ also build a backend once and pass it as `backend=`; the call then uses that bac
 ![ondio architecture: dispatcher, registry, format helpers and backends](architecture.svg#only-light)
 ![ondio architecture: dispatcher, registry, format helpers and backends](architecture-dark.svg#only-dark)
 
-- **dispatcher** — what callers import: every function takes a URI, infers the platform, and delegates. No platform types leak out: SDK errors arrive as `ondio` errors, with the SDK error as the cause.
+- **dispatcher** — what callers import: every function takes a URI, infers the platform, and delegates, or uses the backend given as `backend=`. No platform types leak out: SDK errors arrive as `ondio` errors, with the SDK error as the cause.
 - **registry** — the strategy lookup: maps the URI scheme to a platform name and lazily constructs that platform's backend.
 - **format helpers** — FLAC and Parquet logic written once against the backend protocol, so partial FLAC reads work identically on S3, GCS, HTTP, and local files. FLAC decoding and encoding use `soundfile` (libsndfile, bundled in its wheel).
 - **backends** — one class per platform implementing the byte-level protocol (`read_range` is what makes partial reads cheap on remote files); each wraps its platform SDK and translates its errors to `ondio`'s exception types.

@@ -1,9 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="800" viewBox="0 0 1040 800" role="img" aria-labelledby="title desc">
-<title id="title">ondio architecture — detailed compact layers</title><desc id="desc">The URI-first dispatcher resolves storage through the registry and delegates format operations to FLAC and Parquet helpers. The backends share a byte and file protocol across S3, GCS, HTTP and local storage. create writes only if absent on S3, GCS and local disk. locate resolves a URI to its store and path without storage I/O.</desc>
-<!-- 8px grid; margins 56; URI row y=56; dispatcher y=168..248; middle columns x=56,552 y=336..456; storage boundary y=536; backend columns x=56,296,536,776 y=664..744. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="824" viewBox="0 0 1040 824" role="img" aria-labelledby="title desc">
+<title id="title">ondio architecture — detailed compact layers</title><desc id="desc">The URI-first dispatcher resolves storage through the registry and delegates format operations to FLAC and Parquet helpers. A backend given as backend= is used directly, without the registry. The backends share a byte and file protocol across S3, GCS, HTTP and local storage. create writes only if absent on S3, GCS and local disk. locate and get_environment resolve a URI without storage I/O.</desc>
+<!-- 8px grid; margins 56; URI row y=56; dispatcher y=144..264; middle columns x=32,528 y=320..520; backend= arrow in the gap at x=520; storage boundary y=560; backend columns x=32,272,512,752 y=656..784. -->
 <defs><marker id="arrow" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto"><path d="M1 1 L7 4 L1 7" fill="none" stroke="#61758a" stroke-width="1.2"/></marker></defs>
 <style>text{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;fill:#14304a}.mono{font-family:'SFMono-Regular',Consolas,'Liberation Mono',monospace}.heading{font-family:Helvetica,Arial,sans-serif;font-size:24px;font-weight:600}</style>
-<rect width="1040" height="800" fill="#f6f8fb"/>
+<rect width="1040" height="824" fill="#f6f8fb"/>
 <text x="104" y="56" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="middle" class="mono">s3://…</text>
 <path d="M104 72 V88" fill="none" stroke="#becbd7" stroke-width="1.5"/>
 <text x="296" y="56" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="middle" class="mono">gs://…</text>
@@ -19,43 +19,46 @@
 <rect x="32" y="144" width="4" height="120" rx="0" fill="#7a5ec9" stroke="none"/>
 <text x="56" y="176" style="fill:#4a2e83" text-anchor="start" class="heading">Dispatcher</text>
 <text x="984" y="172" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="end">URI-first API</text>
-<text x="56" y="212" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">read · write · create · download · upload</text>
+<text x="56" y="212" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">read · read_range · write · create · download · upload</text>
 <text x="56" y="240" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start">JSON, FLAC &amp; object management</text>
+<text x="984" y="240" font-size="15" text-anchor="end" style="fill:#61758a">create: only if absent · not HTTP</text>
 <path d="M280 264 V312" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
 <path d="M768 264 V312" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
-<rect x="32" y="320" width="480" height="176" rx="6" fill="#e9f1fb" stroke="none"/>
-<rect x="528" y="320" width="480" height="176" rx="6" fill="#eaf5ef" stroke="none"/>
+<path d="M520 264 V552" fill="none" stroke="#becbd7" stroke-width="1.5" stroke-dasharray="6 5" marker-end="url(#arrow)"/>
+<text x="532" y="298" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">backend=</text>
+<rect x="32" y="320" width="480" height="200" rx="6" fill="#e9f1fb" stroke="none"/>
+<rect x="528" y="320" width="480" height="200" rx="6" fill="#eaf5ef" stroke="none"/>
 <text x="56" y="380" style="fill:#1f4e79" text-anchor="start" class="heading">Registry</text>
 <text x="56" y="416" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start">URI scheme → platform → backend</text>
 <text x="56" y="448" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">get_backend(uri) → backend</text>
 <text x="56" y="476" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">locate(uri) → store + path · no I/O</text>
+<text x="56" y="500" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">get_environment(uri) → env vars</text>
 <text x="552" y="380" style="fill:#1f6b45" text-anchor="start" class="heading">Format helpers</text>
 <text x="552" y="416" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">flac.py</text>
 <text x="700" y="416" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start">Headers &amp; audio windows</text>
 <text x="552" y="448" font-size="17" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">parquet.py</text>
 <text x="700" y="448" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start">Partitioned datasets</text>
-<text x="552" y="476" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">Shared format logic across storage platforms</text>
-<path d="M280 496 V528" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
-<path d="M768 496 V528" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
-<path d="M56 536 H984" fill="none" stroke="#14a48a" stroke-width="1.5"/>
-<text x="56" y="572" style="fill:#0b6e5c" text-anchor="start" class="heading">StorageBackend</text>
-<text x="984" y="570" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="end">Bytes &amp; files</text>
-<text x="56" y="604" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">read · read_range · write · create · download · upload · list_files</text>
-<rect x="32" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
-<text x="56" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">S3</text>
-<text x="56" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">AwsBackend</text>
-<text x="56" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">boto3</text>
-<rect x="272" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
-<text x="296" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">GCS</text>
-<text x="296" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">GcsBackend</text>
-<text x="296" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">google-cloud-storage</text>
-<rect x="512" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
-<text x="536" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">HTTP</text>
-<text x="536" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">HttpBackend</text>
-<text x="536" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">requests · read-only</text>
-<rect x="752" y="632" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
-<text x="776" y="672" style="fill:#0b6e5c" text-anchor="start" class="heading">Local</text>
-<text x="776" y="706" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">LocalBackend</text>
-<text x="776" y="736" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">filesystem</text>
-<text x="984" y="240" font-size="15" text-anchor="end" style="fill:#61758a">create: only if absent · not HTTP</text>
+<text x="552" y="500" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">Shared format logic across storage platforms</text>
+<path d="M280 520 V552" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M768 520 V552" fill="none" stroke="#becbd7" stroke-width="1.5" marker-end="url(#arrow)"/>
+<path d="M56 560 H984" fill="none" stroke="#14a48a" stroke-width="1.5"/>
+<text x="56" y="596" style="fill:#0b6e5c" text-anchor="start" class="heading">StorageBackend</text>
+<text x="984" y="594" font-size="17" font-weight="400" style="fill:#61758a" text-anchor="end">Bytes &amp; files</text>
+<text x="56" y="628" font-size="16" font-weight="400" style="fill:#61758a" text-anchor="start" class="mono">read · read_range · write · create · download · upload · list_files</text>
+<rect x="32" y="656" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="56" y="696" style="fill:#0b6e5c" text-anchor="start" class="heading">S3</text>
+<text x="56" y="730" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">AwsBackend</text>
+<text x="56" y="760" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">boto3</text>
+<rect x="272" y="656" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="296" y="696" style="fill:#0b6e5c" text-anchor="start" class="heading">GCS</text>
+<text x="296" y="730" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">GcsBackend</text>
+<text x="296" y="760" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">google-cloud-storage</text>
+<rect x="512" y="656" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="536" y="696" style="fill:#0b6e5c" text-anchor="start" class="heading">HTTP</text>
+<text x="536" y="730" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">HttpBackend</text>
+<text x="536" y="760" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">requests · read-only</text>
+<rect x="752" y="656" width="224" height="128" rx="6" fill="#e6f7f3" stroke="none"/>
+<text x="776" y="696" style="fill:#0b6e5c" text-anchor="start" class="heading">Local</text>
+<text x="776" y="730" font-size="16" font-weight="400" style="fill:#14304a" text-anchor="start" class="mono">LocalBackend</text>
+<text x="776" y="760" font-size="15" font-weight="400" style="fill:#61758a" text-anchor="start">filesystem</text>
 </svg>
