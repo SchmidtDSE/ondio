@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.5.1 - unreleased
+
+- **`anonymous=True` on S3 uses no profile.** Before, a profile that
+  `AWS_PROFILE` or `AWS_DEFAULT_PROFILE` named was loaded, and if it did not
+  exist, the call raised `AuthError`. Now the variables are not read. The region
+  still comes from `region_name` or `AWS_DEFAULT_REGION`, but no longer from the
+  region or endpoint settings of that profile.
+
 ## 0.5.0 - 2026-11-02
 
 This release adds features and changes two local-disk behaviors, listed under

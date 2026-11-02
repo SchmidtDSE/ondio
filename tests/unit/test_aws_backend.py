@@ -483,6 +483,12 @@ class TestAnonymous:
         AwsBackend()._client.put_object(Bucket=prefix.removeprefix("s3://"), Key="pub.bin", Body=b"open", ACL="public-read")
         assert ondio.read(f"{prefix}/pub.bin", anonymous=True) == b"open"
 
+    @pytest.mark.parametrize("variable", ["AWS_PROFILE", "AWS_DEFAULT_PROFILE"])
+    def test_anonymous_ignores_a_profile_from_the_environment(self, prefix, monkeypatch, variable):
+        AwsBackend()._client.put_object(Bucket=prefix.removeprefix("s3://"), Key="pub.bin", Body=b"open", ACL="public-read")
+        monkeypatch.setenv(variable, "does-not-exist")
+        assert ondio.read(f"{prefix}/pub.bin", anonymous=True) == b"open"
+
     def test_anonymous_read_of_a_private_object_is_an_auth_error(self, prefix):
         ondio.write(f"{prefix}/private.bin", b"closed")
         with pytest.raises(ondio.AuthError):

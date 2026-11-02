@@ -309,7 +309,7 @@ ondio.list_files("gs://a-public-bucket/audio/", anonymous=True)
 ```
 
 On S3 the requests are unsigned, and only `endpoint_url` and `region_name` can be
-given with it. On GCS the client has no credentials and no project, and only
+given with it. No profile is used, also not one that `AWS_PROFILE` names. On GCS the client has no credentials and no project, and only
 `endpoint_url` can be given with it. Other options raise `ValueError`. A bucket
 that is not public then raises `AuthError`, so a caller can try with credentials
 first and retry with `anonymous=True` on `AuthError`. For any other client, pass it

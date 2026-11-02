@@ -94,7 +94,8 @@ class AwsBackend:
             with it.
         anonymous: Send unsigned requests, with no credentials, for a public
             bucket. Only `endpoint_url` and `region_name` can be given with it.
-            A request to a bucket that is not public is then an `AuthError`.
+            No profile is used, also not one that `AWS_PROFILE` names. A
+            request to a bucket that is not public is then an `AuthError`.
         **session_kwargs: Forwarded to `boto3.Session` (e.g. `profile_name`,
             `region_name`).
 
@@ -116,20 +117,25 @@ class AwsBackend:
                 raise ValueError(f"give client or {', '.join(options)}, not both")
             self._client = client
             return
-        config = None
+        config = session = None
         if anonymous:
             # The names only: a value could be a secret.
             refused = sorted(set(session_kwargs) - {"region_name"})
             if refused:
                 raise ValueError(f"give anonymous or {', '.join(refused)}, not both")
+            import botocore.session
             from botocore import UNSIGNED
             from botocore.config import Config
 
             config = Config(signature_version=UNSIGNED)
+            # Read no profile from AWS_PROFILE or AWS_DEFAULT_PROFILE: unsigned
+            # requests use none, and a named profile that does not exist stops
+            # the client from being made.
+            session = botocore.session.Session(session_vars={"profile": (None, None, None, None)})
         import boto3
 
         with self._translate("the new S3 client"):
-            self._client = boto3.Session(**session_kwargs).client(
+            self._client = boto3.Session(botocore_session=session, **session_kwargs).client(
                 "s3", endpoint_url=endpoint_url, config=config
             )
 
