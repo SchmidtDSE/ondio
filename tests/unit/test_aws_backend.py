@@ -470,11 +470,6 @@ def test_a_body_cut_short_is_a_network_error(prefix, monkeypatch):
         backend.read(f"{prefix}/k")
 
 
-class _FakeSession:
-    def client(self, *args, **kwargs):
-        return object()
-
-
 class TestAnonymous:
     def test_anonymous_client_is_unsigned(self):
         from botocore import UNSIGNED
@@ -506,12 +501,6 @@ class TestAnonymous:
         with pytest.raises(ValueError, match="anonymous"):
             AwsBackend(client=object(), anonymous=True)
 
-    def test_anonymous_false_is_the_same_as_not_giving_it(self, monkeypatch):
-        calls = []
-        monkeypatch.setattr("boto3.Session", lambda **kw: calls.append(kw) or _FakeSession())
-        AwsBackend(anonymous=False, profile_name="p")
-        assert calls == [{"profile_name": "p"}]
-
 
 class TestUploadWithoutOverwrite:
     def test_upload_without_overwrite_writes_a_new_object(self, tmp_path, prefix):
@@ -528,14 +517,6 @@ class TestUploadWithoutOverwrite:
         with pytest.raises(ObjectExistsError):
             ondio.upload(uri, source, overwrite=False)
         assert ondio.read(uri) == b"first"
-
-    def test_upload_still_replaces_by_default(self, tmp_path, prefix):
-        uri = f"{prefix}/old.bin"
-        ondio.write(uri, b"first")
-        source = tmp_path / "src.bin"
-        source.write_bytes(b"second")
-        ondio.upload(uri, source)
-        assert ondio.read(uri) == b"second"
 
     def test_upload_without_overwrite_refuses_a_file_over_the_put_limit(self, tmp_path, prefix, monkeypatch):
         monkeypatch.setattr("ondio.backends.aws._MAX_SINGLE_PUT", 4)

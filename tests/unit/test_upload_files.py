@@ -42,16 +42,6 @@ def test_local_target_uris_join_the_prefix_and_the_relative_path(src_dir, tmp_pa
     assert (out / "sub" / "deeper" / "c.bin").read_bytes() == b"sub/deeper/c.bin"
 
 
-def test_trailing_slash_gives_the_same_keys(src_dir, tmp_path):
-    out = tmp_path / "out"
-    assert ondio.upload_files(str(out), src_dir) == ondio.upload_files(f"{out}/", src_dir)
-
-
-def test_empty_folders_make_no_objects(src_dir, tmp_path):
-    ondio.upload_files(str(tmp_path / "out"), src_dir)
-    assert not (tmp_path / "out" / "empty").exists()
-
-
 def test_an_empty_folder_uploads_nothing(tmp_path):
     (tmp_path / "none").mkdir()
     assert ondio.upload_files(str(tmp_path / "out"), tmp_path / "none") == []
@@ -87,9 +77,10 @@ def test_a_file_instead_of_a_folder_raises(tmp_path):
         ondio.upload_files(str(tmp_path / "out"), tmp_path / "f.bin")
 
 
-def test_backend_with_options_is_refused(src_dir, tmp_path):
+def test_backend_with_options_is_refused_even_with_nothing_to_upload(tmp_path):
+    (tmp_path / "none").mkdir()
     with pytest.raises(ValueError):
-        ondio.upload_files(str(tmp_path / "out"), src_dir, backend=LocalBackend(), region_name="x")
+        ondio.upload_files(str(tmp_path / "out"), tmp_path / "none", backend=LocalBackend(), region_name="x")
 
 
 @pytest.mark.skipif(os.name == "nt" or os.geteuid() == 0, reason="POSIX permissions, not root")

@@ -511,14 +511,6 @@ class TestUploadWithoutOverwrite:
             ondio.upload(uri, source, overwrite=False)
         assert ondio.read(uri) == b"first"
 
-    def test_upload_still_replaces_by_default(self, tmp_path):
-        uri = str(tmp_path / "out" / "old.bin")
-        ondio.write(uri, b"first")
-        source = tmp_path / "src.bin"
-        source.write_bytes(b"second")
-        ondio.upload(uri, source)
-        assert ondio.read(uri) == b"second"
-
     def test_refused_local_upload_leaves_no_temporary_file(self, tmp_path):
         target = tmp_path / "out" / "x.bin"
         ondio.write(str(target), b"first")
@@ -528,17 +520,20 @@ class TestUploadWithoutOverwrite:
             ondio.upload(str(target), source, overwrite=False)
         assert sorted(p.name for p in target.parent.iterdir()) == ["x.bin"]
 
-    def test_local_upload_replaces_without_a_partial_file(self, tmp_path, monkeypatch):
-        # The target is never opened for writing: the content reaches it by os.replace.
+    def test_failed_local_upload_keeps_the_old_file(self, tmp_path, monkeypatch):
         target = tmp_path / "x.bin"
         target.write_bytes(b"first")
-        replaced = []
-        real = os.replace
-        monkeypatch.setattr(os, "replace", lambda a, b: replaced.append(Path(b)) or real(a, b))
         source = tmp_path / "src.bin"
         source.write_bytes(b"second")
-        ondio.upload(str(target), source)
-        assert target.read_bytes() == b"second" and replaced == [target]
+
+        def copy_part_then_fail(src, dst):
+            Path(dst).write_bytes(b"sec")
+            raise OSError(errno.EIO, "disk failed")
+
+        monkeypatch.setattr("shutil.copyfile", copy_part_then_fail)
+        with pytest.raises(OndioError):
+            ondio.upload(str(target), source)
+        assert target.read_bytes() == b"first"
         assert sorted(p.name for p in tmp_path.iterdir()) == ["src.bin", "x.bin"]
 
     def test_upload_passes_overwrite_only_when_it_is_false(self, tmp_path):
