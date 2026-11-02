@@ -118,3 +118,15 @@ def test_a_broken_link_raises_before_any_upload(src_dir, tmp_path):
     with pytest.raises(FileNotFoundError):
         ondio.upload_files(str(tmp_path / "out"), src_dir)
     assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize("name", ["a%20b.bin", "%2e%2e%2fescaped.bin", "a#b.bin", "a?b.bin"])
+def test_file_uris_keep_the_filename_as_it_is(tmp_path, name):
+    src = tmp_path / "src"
+    (src / "sub").mkdir(parents=True)
+    (src / "sub" / name).write_bytes(b"x")
+    out = tmp_path / "out"
+    uris = ondio.upload_files(f"file://{out}", src)
+    assert (out / "sub" / name).read_bytes() == b"x"
+    assert not (out / "escaped.bin").exists()
+    assert ondio.read(uris[0]) == b"x"

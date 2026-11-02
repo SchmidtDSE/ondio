@@ -19,7 +19,7 @@ import os
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 from typing import Any, Literal, Sequence, overload
-from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 import numpy as np
 
@@ -342,7 +342,8 @@ def upload_files(
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
-        The URIs written, sorted by relative path.
+        The URIs written, sorted by relative path. For a `file://` prefix the
+        relative paths are percent-encoded, as a `file://` URI requires.
 
     Raises:
         FileNotFoundError: Before anything is uploaded, if `local_dir` does not
@@ -378,7 +379,12 @@ def upload_files(
             jobs.append((path.relative_to(root).as_posix(), path))
     jobs.sort()
     base = uri_prefix.removesuffix("/")
-    uris = [f"{base}/{relative}" for relative, _ in jobs]
+    # A file:// URI is percent-decoded when it is read, so a name such as
+    # "%2e%2e%2fx" would point outside the folder. Encode it; keep the "/".
+    if urlparse(uri_prefix).scheme.lower() == "file":
+        uris = [f"{base}/{quote(relative)}" for relative, _ in jobs]
+    else:
+        uris = [f"{base}/{relative}" for relative, _ in jobs]
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         futures = [
