@@ -34,5 +34,6 @@ Everything here is importable from `ondio` itself, for example `ondio.read` or
         - ObjectNotFoundError
         - ObjectExistsError
         - AuthError
+        - NetworkError
         - UnsupportedOperationError
         - UnknownPlatformError

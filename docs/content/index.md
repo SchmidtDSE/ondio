@@ -60,6 +60,7 @@ fetches and parses one.
 | Function | Description |
 |-|-|
 | `read(uri)` | Read the full object at `uri` into memory as `bytes` |
+| [`read_range(uri, start_byte, end_byte)`](guide/objects.md#byte-ranges) | Read an inclusive byte range of the object at `uri` |
 | `write(uri, data)` | Write in-memory `bytes` to `uri` |
 | [`create(uri, data)`](guide/objects.md#create-only-if-absent) | Write bytes only if the object does not exist |
 | [`locate(uri)`](guide/objects.md#where-a-uri-points) | Identify the store and path for a URI |
@@ -79,7 +80,7 @@ fetches and parses one.
 
 ## Where next
 
-- [Objects, files, and JSON](guide/objects.md): backend support, `create`, listing, and endpoints.
+- [Objects, files, and JSON](guide/objects.md): backend support, `create`, listing, errors, reusing a backend, HTTP options, and endpoints.
 - [FLAC](guide/flac.md): headers, windowed reads, and how ranged reads stay sample-exact.
 - [Parquet](guide/parquet.md): hive-partitioned datasets.
 - [Logging](guide/logging.md): where `ondio`'s log lines go, and how to route or silence them.

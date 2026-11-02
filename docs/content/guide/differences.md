@@ -11,7 +11,7 @@ implementations side by side on synthetic fixtures and on real field recordings.
 | --- | --- |
 | `io.read(src)` (a platform response object) | `ondio.read(uri)` (`bytes`) |
 | `io.read(src, dest)` | `ondio.download(uri, out_path)` |
-| `io.read(src, start_byte=…, end_byte=…)` | No public equivalent |
+| `io.read(src, start_byte=…, end_byte=…)` | `ondio.read_range(uri, start_byte, end_byte)` (inclusive end; bytes, not a playable file) |
 | `io.read_flac(src, dest)` | `ondio.download_flac(uri, out_path)` |
 | `io.read_flac(src, dest, start_time=…, end_time=…)` | `ondio.download_flac(uri, out_path, start_sec, end_sec)` |
 | `io.read_partial_flac(src, dest, start_time, end_time)` | `ondio.download_flac(uri, out_path, start_sec, end_sec)` |
@@ -19,7 +19,7 @@ implementations side by side on synthetic fixtures and on real field recordings.
 | A FLAC window in memory | `ondio.read_flac(uri, start_sec, end_sec)` (new) |
 | `io.extract_flac_header(src)` (a `dict`) | `ondio.extract_flac_header(uri)` (a `FlacHeader`) |
 | `platform_name=` | None: the URI scheme picks the backend |
-| `client=` | Backend options, such as `profile_name=` (see [Backend options](objects.md#backend-options)) |
+| `client=` | `backend=AwsBackend(client=…)` or `backend=GcsBackend(client=…)` (see [Reusing a backend](objects.md#reusing-a-backend)), or backend options such as `profile_name=` (see [Backend options](objects.md#backend-options)) |
 | `create_parents=`, `overwrite=` | None: `download` always creates parent directories and replaces an existing file |
 | `printer=` | `ondio.set_printer(obj)`, once per process (see [Logging](logging.md)) |
 

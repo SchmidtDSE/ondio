@@ -109,7 +109,6 @@ length (truncated recorder files exist) raises for windows past its real end.
 Windows clear of the damage read exactly. If the damage is in the bytes already
 fetched, the ranged read raises without fetching more. A ranged failure names
 `use_range=False`: a full download is never started on your behalf.
-`padding_ratio` is deprecated and ignored.
 
 Over HTTP, a windowed `read_flac` or `download_flac`, and `extract_flac_header`,
 need a server that honors range requests and sends a `Content-Length`, whatever

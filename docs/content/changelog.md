@@ -1,7 +1,43 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (unreleased)
 
+This release changes error types and HTTP behavior. Code that catches `OndioError`
+needs no change.
+
+**Changes that can break a caller:**
+
+- **SDK errors arrive as `ondio` errors.** Errors from `boto3`, `botocore`,
+  `google-auth`, `google-cloud-storage` and `requests` that escaped before (such as
+  `NoCredentialsError`, `ProfileNotFound`, `EndpointConnectionError`,
+  `DefaultCredentialsError` and `requests.ConnectionError`) now raise `AuthError`,
+  `NetworkError` or `OndioError`. The SDK error is the `__cause__`. Backend
+  constructors are translated too. A bad URL is still `ValueError`, and a missing
+  extra is still `ImportError`. See [Errors](guide/objects.md#errors).
+- **S3 and GCS `create` with no credentials raises `AuthError`**, not "could not
+  confirm create". A transport failure in `create` raises `NetworkError`.
+- **HTTP requests time out.** The default is `(10, 60)` seconds (connect, read).
+  `timeout=None` restores no limit.
+- **HTTP redirects that are not followed raise `OndioError`.** This applies only
+  with the new `allow_redirects=False`.
+- **`create` over HTTP is refused by `HttpBackend`**, not before backend setup. So
+  without the `http` extra it raises `ImportError`, as `write` does.
+- **`padding_ratio` is removed** from `read_flac` and `download_flac`. It was
+  ignored since 0.3.0.
+- **The `gcs` extra needs `google-cloud-storage` 3 or later.** `create` already
+  needed it; now every GCS call does.
+
+**New:**
+
+- `ondio.NetworkError`: no answer came from the store. The request can be retried.
+- `HttpBackend` options: `headers`, `auth`, `cookies`, `verify`, `timeout` and
+  `allow_redirects`. They also work per call, as in `ondio.read(url, headers=...)`.
+  See [Private HTTPS files](guide/objects.md#private-https-files).
+- `AwsBackend(client=...)` and `GcsBackend(client=...)` use a client that you made,
+  for example an unsigned S3 client for a public bucket.
+- Every public function takes `backend=`, a backend to use instead of one built from
+  the URI. See [Reusing a backend](guide/objects.md#reusing-a-backend).
+- `ondio.read_range(uri, start_byte, end_byte)` reads an inclusive byte range.
 - `ondio.backends` exports `StorageBackend` and the four backend classes
   (`AwsBackend`, `GcsBackend`, `HttpBackend`, `LocalBackend`).
 - A documentation site, built with Zensical.

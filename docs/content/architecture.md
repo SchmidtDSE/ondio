@@ -2,12 +2,13 @@
 
 `ondio` defines a unified interface for reading/writing files across different platforms, where the target platform is inferred based on the structure of the URI. The URI structure is used to dispatch to platform specific implementations, combining the [strategy](https://en.wikipedia.org/wiki/Strategy_pattern) and [registry](https://martinfowler.com/eaaCatalog/registry.html) design patterns.
 
-Each call resolves a backend from the URI scheme and delegates to it:
+Each call resolves a backend from the URI scheme and delegates to it. A caller can
+also build a backend once and pass it as `backend=`; the call then uses that backend:
 
 ![ondio architecture: dispatcher, registry, format helpers and backends](architecture.svg#only-light)
 ![ondio architecture: dispatcher, registry, format helpers and backends](architecture-dark.svg#only-dark)
 
-- **dispatcher** — what callers import: every function takes a URI, infers the platform, and delegates. No platform types leak out.
+- **dispatcher** — what callers import: every function takes a URI, infers the platform, and delegates. No platform types leak out: SDK errors arrive as `ondio` errors, with the SDK error as the cause.
 - **registry** — the strategy lookup: maps the URI scheme to a platform name and lazily constructs that platform's backend.
 - **format helpers** — FLAC and Parquet logic written once against the backend protocol, so partial FLAC reads work identically on S3, GCS, HTTP, and local files. FLAC decoding and encoding use `soundfile` (libsndfile, bundled in its wheel).
 - **backends** — one class per platform implementing the byte-level protocol (`read_range` is what makes partial reads cheap on remote files); each wraps its platform SDK and translates its errors to `ondio`'s exception types.

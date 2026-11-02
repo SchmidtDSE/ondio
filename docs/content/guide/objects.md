@@ -21,7 +21,8 @@ The base install supports local files and S3. Install `ondio[gcs]` for GCS and
 `boto3`. GCS uses the credentials and configuration available to the Google Cloud
 Storage client. Configure those credentials before accessing a private bucket.
 To pick an AWS profile or another client setting per call, see
-[Backend options](#backend-options).
+[Backend options](#backend-options). To build a backend once and use it for many
+calls, see [Reusing a backend](#reusing-a-backend).
 
 ## Bytes in memory
 
@@ -34,6 +35,20 @@ import ondio
 data = ondio.read("s3://my-bucket/audio/rec.flac")
 ondio.write("s3://my-bucket/results/example.txt", b"done")
 ```
+
+## Byte ranges
+
+`read_range` reads the bytes from `start_byte` to `end_byte`, both included.
+`end_byte=None` reads to the end. A range past the end returns the bytes that
+exist, possibly none.
+
+```python
+head = ondio.read_range("s3://my-bucket/audio/rec.flac", 0, 3)
+assert head == b"fLaC"
+```
+
+The result is the stored bytes, not a playable file. For a time window of a FLAC
+file, use [`read_flac`](flac.md).
 
 ## JSON
 
@@ -79,12 +94,13 @@ except ondio.ObjectExistsError:
 
 `create` works on S3 (a conditional `PUT` with `If-None-Match: *`), on GCS (a
 conditional upload with `if_generation_match=0`), and on local disk (a temporary file
-linked into place). HTTP raises `UnsupportedOperationError`, before loading optional
-SDKs or initializing credentials. S3 and GCS transport failures raise `OndioError`,
-with the original exception as the cause. If `create` fails for any reason other than
-`ObjectExistsError`, the object may or may not exist; read it to find out. On S3 and
-GCS, `ObjectExistsError` can name an object that the same call wrote, when the client
-retried after a lost response; compare the bytes if you need to know who wrote it.
+linked into place). On HTTP, `HttpBackend` raises `UnsupportedOperationError`.
+Missing credentials raise `AuthError`: no request was sent. A connection failure or
+timeout raises `NetworkError` with the message "could not confirm create". If `create`
+fails for any reason other than `ObjectExistsError` or `AuthError`, the object may or
+may not exist; read it to find out. On S3 and GCS, `ObjectExistsError` can name an
+object that the same call wrote, when the client retried after a lost response;
+compare the bytes if you need to know who wrote it.
 
 ## Where a URI points
 
@@ -140,9 +156,31 @@ if ondio.exists("s3://my-bucket/tmp/scratch.json"):
 
 ## Errors
 
-Missing objects raise `ondio.ObjectNotFoundError`. Access failures can raise
-`ondio.AuthError`. Both are types of `ondio.OndioError`, which also covers other
-storage failures. Catch the specific error when your code can handle it.
+Every storage failure raises a type of `ondio.OndioError`. An error from `boto3`,
+`google-cloud-storage` or `requests` is translated, and the original exception is
+its `__cause__`.
+
+| Error | Meaning |
+| --- | --- |
+| `ObjectNotFoundError` | No object at the URI |
+| `AuthError` | Missing, wrong or expired credentials, or access refused |
+| `NetworkError` | No answer from the store: the connection failed or closed, or it timed out. The request can be retried |
+| `UnsupportedOperationError` | The backend cannot do this, e.g. `write` over HTTP |
+| `ObjectExistsError` | `create` found an object at the URI |
+| `OndioError` | Any other storage failure |
+
+A bad request raises `ValueError`, not `OndioError`: an inverted byte range, a
+FLAC window that is empty, or a malformed URI. So code that falls back to another
+source can catch `OndioError` for "the fetch failed" and let `ValueError` show a bug.
+
+```python
+try:
+    data = ondio.read("s3://my-bucket/audio/missing.flac")
+except ondio.ObjectNotFoundError:
+    data = None
+```
+
+A missing extra (for example `ondio[gcs]`) raises `ImportError`.
 
 ## Backend options
 
@@ -153,6 +191,120 @@ Keyword arguments go to the backend's constructor: `boto3.Session` for `s3://`,
 ```python
 ondio.list_files("s3://my-bucket/audio/", profile_name="dse")
 ```
+
+For `http(s)://`, the options go to `HttpBackend`; see
+[Private HTTPS files](#private-https-files).
+
+## Reusing a backend
+
+Each call builds a new backend from the URI and its options. To use one client and
+its connections for many calls, build the backend once and pass it as `backend=`.
+Every public function takes it. With `backend=`, other options raise `ValueError`:
+give them to the backend instead.
+
+```python
+from ondio.backends import AwsBackend
+
+s3 = AwsBackend(region_name="us-east-1")
+header = ondio.extract_flac_header("s3://my-bucket/audio/rec.flac", backend=s3)
+samples, rate = ondio.read_flac("s3://my-bucket/audio/rec.flac", 10.0, 15.0, backend=s3)
+```
+
+`AwsBackend(client=...)` and `GcsBackend(client=...)` use a client that you made.
+No other option can be given with `client`.
+
+<!-- docs-test: skip (needs GCS credentials) -->
+```python
+from google.cloud import storage
+from ondio.backends import GcsBackend
+
+gcs = GcsBackend(client=storage.Client(project="my-project"))
+ondio.read("gs://my-bucket/audio/rec.flac", backend=gcs)
+```
+
+`download_files` gives the one backend to all its threads. S3 clients and
+`HttpBackend` can be shared that way. A `google-cloud-storage` client does not
+promise it; give `download_files` no GCS backend if that matters to you.
+
+ondio does not check that the backend matches the URI scheme. A wrong backend fails
+at its first call.
+
+## Private HTTPS files
+
+`HttpBackend` takes these options, as keywords:
+
+| Option | Default | Use |
+| --- | --- | --- |
+| `headers` | none | Headers sent with every request |
+| `auth` | none | Anything `requests` takes as `auth`, e.g. `("user", "password")` |
+| `cookies` | none | Cookies sent with every request |
+| `verify` | `True` | `False` skips the TLS certificate check; a path names a CA bundle |
+| `timeout` | `(10, 60)` | Seconds: `(connect, read)`, one number, or `None` for no limit |
+| `allow_redirects` | `True` | If `False`, a 3xx answer raises `OndioError` |
+
+A bearer token is a header. `requests` does not send `Authorization` when a
+redirect goes to another host. No `ondio` error message holds an option's value.
+
+<!-- docs-test: skip (needs an HTTPS server) -->
+```python
+from ondio.backends import HttpBackend
+
+web = HttpBackend(headers={"Authorization": "Bearer <token>"}, timeout=(5, 30))
+samples, rate = ondio.read_flac("https://example.org/rec.flac", 0.0, 5.0, backend=web)
+```
+
+The same options also work per call, without a backend:
+`ondio.read(url, headers={...})`. A `Range` header is refused with `ValueError`:
+use `read_range`.
+
+The read timeout limits each wait for data, not the whole request. A server that
+keeps sending data slowly is not stopped by it.
+
+## Public S3 buckets
+
+To read a public bucket with no credentials, give `AwsBackend` an unsigned client:
+
+<!-- docs-test: skip (needs a public bucket) -->
+```python
+import boto3
+from botocore import UNSIGNED
+from botocore.config import Config
+
+public = AwsBackend(client=boto3.client("s3", config=Config(signature_version=UNSIGNED)))
+ondio.read("s3://a-public-bucket/rec.flac", backend=public)
+```
+
+## Tests with a fake backend
+
+`backend=` also takes a test double. A backend is any object with the methods of
+[`StorageBackend`](../reference/backends.md), each taking the URI first. This one
+serves `s3://` URIs from a local directory:
+
+```python
+from pathlib import Path
+
+from ondio.backends import LocalBackend
+
+
+class S3OnDisk:
+    def __init__(self, root):
+        self._root = Path(root)
+        self._local = LocalBackend()
+
+    def __getattr__(self, name):
+        method = getattr(self._local, name)
+        return lambda uri, *args, **kwargs: method(
+            str(self._root / uri.removeprefix("s3://")), *args, **kwargs
+        )
+
+
+Path("fake/my-bucket").mkdir(parents=True)
+Path("fake/my-bucket/a.txt").write_bytes(b"hello")
+assert ondio.read("s3://my-bucket/a.txt", backend=S3OnDisk("fake")) == b"hello"
+```
+
+`StorageBackend` is part of the public API: a change to its methods is a breaking
+change.
 
 ## Endpoints
 
