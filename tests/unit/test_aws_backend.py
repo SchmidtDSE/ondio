@@ -432,3 +432,29 @@ def test_credential_process_output_is_not_in_the_message(prefix, monkeypatch):
     with pytest.raises(ondio.AuthError) as raised:
         backend.size(f"{prefix}/k")
     assert "SECRET-OUTPUT" not in str(raised.value)
+
+
+@pytest.mark.parametrize("call", [
+    lambda b, uri: b.read(uri),
+    lambda b, uri: b.size(uri),
+    lambda b, uri: b.create(uri, b"x"),
+])
+def test_an_empty_key_is_a_value_error(prefix, call):
+    # botocore refuses an empty key with ParamValidationError, which is a BotoCoreError.
+    backend = get_backend(f"{prefix}/")
+    with pytest.raises(ValueError) as raised:
+        call(backend, f"{prefix}/")
+    assert not isinstance(raised.value, OndioError)
+
+
+def test_a_body_cut_short_is_a_network_error(prefix, monkeypatch):
+    from botocore.exceptions import IncompleteReadError
+
+    class Body:
+        def read(self):
+            raise IncompleteReadError(actual_bytes=1, expected_bytes=10)
+
+    backend = get_backend(f"{prefix}/k")
+    monkeypatch.setattr(backend._client, "get_object", lambda **kwargs: {"Body": Body()})
+    with pytest.raises(ondio.NetworkError):
+        backend.read(f"{prefix}/k")

@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import contextlib
 import os
-from pathlib import Path
 from urllib.parse import urlparse
 
-from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
+from ondio.backends.protocol import (
+    _exact_object_matches,
+    _folder_match,
+    _matches_filters,
+    _replace_on_success,
+)
 from ondio.types import AuthError, NetworkError, ObjectExistsError, ObjectNotFoundError, OndioError
 
 
@@ -27,7 +31,13 @@ def _transport_errors() -> tuple[type[Exception], ...]:
     from google.api_core import exceptions as gexc
     from google.auth.exceptions import TransportError as GoogleTransportError
 
-    return (GoogleTransportError, requests.ConnectionError, requests.Timeout, gexc.RetryError)
+    return (
+        GoogleTransportError,
+        requests.ConnectionError,
+        requests.Timeout,
+        requests.exceptions.ChunkedEncodingError,  # the body stopped in the middle
+        gexc.RetryError,
+    )
 
 
 class GcsBackend:
@@ -166,10 +176,9 @@ class GcsBackend:
                 raise OndioError(f"GCS checksum mismatch for {uri}") from exc
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
-        dest = Path(out_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        with self._translate(uri):
-            self._blob(uri).download_to_filename(str(dest))
+        # The client deletes its file only for some errors, and opens it with "wb".
+        with _replace_on_success(out_path) as temporary, self._translate(uri):
+            self._blob(uri).download_to_filename(str(temporary))
 
     def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
         with self._translate(uri):

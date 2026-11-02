@@ -44,6 +44,7 @@ def _from_botocore_error(exc, uri: str, message: str | None = None) -> OndioErro
         ConnectionError as BotoConnectionError,
         CredentialRetrievalError,
         HTTPClientError,
+        IncompleteReadError,
         NoCredentialsError,
         PartialCredentialsError,
         ProfileNotFound,
@@ -63,7 +64,7 @@ def _from_botocore_error(exc, uri: str, message: str | None = None) -> OndioErro
     if isinstance(exc, credential_errors):
         return AuthError(f"S3 credentials failed for {uri}: {type(exc).__name__}")
     message = message or f"S3 request failed for {uri}: {type(exc).__name__}"
-    if isinstance(exc, (BotoConnectionError, HTTPClientError)):
+    if isinstance(exc, (BotoConnectionError, HTTPClientError, IncompleteReadError)):
         return NetworkError(message)
     return OndioError(message)
 
@@ -108,12 +109,15 @@ class AwsBackend:
             S3TransferFailedError,
             S3UploadFailedError,
         )
-        from botocore.exceptions import BotoCoreError, ClientError
+        from botocore.exceptions import BotoCoreError, ClientError, ParamValidationError
 
         try:
             yield
         except ClientError as exc:
             raise _from_client_error(exc, uri) from exc
+        except ParamValidationError as exc:
+            # botocore checked the arguments before sending: a bad request, not a failed fetch.
+            raise ValueError(f"invalid S3 request for {uri}") from exc
         except BotoCoreError as exc:
             raise _from_botocore_error(exc, uri) from exc
         except RetriesExceededError as exc:
@@ -163,7 +167,7 @@ class AwsBackend:
     def create(self, uri: str, data: bytes) -> None:
         # A conditional PUT: S3 refuses it with 412 if the key exists. A 409 means
         # another conditional write was in progress, which proves nothing.
-        from botocore.exceptions import BotoCoreError, ClientError
+        from botocore.exceptions import BotoCoreError, ClientError, ParamValidationError
 
         bucket, key = _split(uri)
         try:
@@ -172,6 +176,8 @@ class AwsBackend:
             if exc.response.get("Error", {}).get("Code") == "PreconditionFailed":
                 raise ObjectExistsError(f"object already exists: {uri}") from exc
             raise _from_client_error(exc, uri) from exc
+        except ParamValidationError as exc:
+            raise ValueError(f"invalid S3 request for {uri}") from exc
         except BotoCoreError as exc:
             # The request may have reached S3 even though no response arrived.
             message = f"could not confirm create for {uri}: {type(exc).__name__}"

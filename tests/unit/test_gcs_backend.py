@@ -294,7 +294,8 @@ class TestCreate:
             (gexc.RetryError("deadline exceeded", cause=None), NetworkError),
             (google.auth.exceptions.TransportError("connection reset"), NetworkError),
             (requests.exceptions.ConnectionError("connection reset"), NetworkError),
-            (requests.exceptions.ChunkedEncodingError("broken body"), OndioError),
+            (requests.exceptions.ChunkedEncodingError("broken body"), NetworkError),
+            (requests.exceptions.TooManyRedirects("loop"), OndioError),
             # a resumable upload (over 8 MiB) whose checksum does not match
             (google.cloud.storage.exceptions.DataCorruption(None, "checksum mismatch"), OndioError),
         ],
@@ -371,7 +372,8 @@ class TestTranslation:
         (requests.Timeout("slow"), NetworkError),
         (gexc.RetryError("gave up", cause=None), NetworkError),
         (google.cloud.storage.exceptions.InvalidResponse(None, "bad"), OndioError),
-        (requests.exceptions.ChunkedEncodingError("broken body"), OndioError),
+        (requests.exceptions.ChunkedEncodingError("broken body"), NetworkError),
+        (requests.exceptions.TooManyRedirects("loop"), OndioError),
     ])
     @pytest.mark.parametrize("call", ["read_range", "size", "exists"])
     def test_read_paths(self, backend, monkeypatch, failure, expected, call):
@@ -419,3 +421,18 @@ def test_a_session_url_is_not_in_the_message(backend, monkeypatch, tmp_path, met
         run()
     assert "SECRET-SESSION" not in str(raised.value)
     assert raised.value.__cause__ is failure
+
+
+def test_failed_download_leaves_no_partial_file(backend, monkeypatch, tmp_path):
+    def broken(self, filename):
+        with open(filename, "wb") as out:
+            out.write(b"part")
+        raise requests.exceptions.ChunkedEncodingError("cut off")
+
+    monkeypatch.setattr(FakeBlob, "download_to_filename", broken)
+    dest = tmp_path / "a.flac"
+    dest.write_bytes(b"older copy")
+    with pytest.raises(NetworkError):
+        backend.download(f"{PREFIX}/audio/chunk_001.flac", dest)
+    assert dest.read_bytes() == b"older copy"
+    assert [p.name for p in tmp_path.iterdir()] == ["a.flac"]

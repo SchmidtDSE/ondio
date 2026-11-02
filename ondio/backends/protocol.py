@@ -6,8 +6,11 @@ in the dispatcher and file-format specific modules — backends deal only in byt
 
 from __future__ import annotations
 
+import contextlib
 import os
-from collections.abc import Callable
+import uuid
+from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import Protocol
 
 from ondio.types import ObjectNotFoundError
@@ -248,3 +251,21 @@ class StorageBackend(Protocol):
             uri: URI of the object.
         """
         ...
+
+
+@contextlib.contextmanager
+def _replace_on_success(out_path: str | os.PathLike[str]) -> Iterator[Path]:
+    """Give a temporary path beside `out_path`; move it onto `out_path` if the block succeeds.
+
+    A failed download then leaves no partial file, and a file already at `out_path`
+    stays as it was. The caller creates the temporary file, so it gets the normal
+    permissions.
+    """
+    dest = Path(out_path)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    temporary = dest.with_name(f".{dest.name}.{uuid.uuid4().hex}.partial")
+    try:
+        yield temporary
+        os.replace(temporary, dest)
+    finally:
+        temporary.unlink(missing_ok=True)

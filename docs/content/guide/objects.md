@@ -65,6 +65,9 @@ summary = ondio.read_json("s3://my-bucket/results/summary.json")
 `download` streams an object to a local path, creating parent directories.
 `upload` streams a local file to a URI without reading it into memory, replacing
 any object there. The URI always comes first, the local path second.
+A failed `download` leaves no partial file: the data goes to a temporary file
+beside the local path, which replaces the local path only when the download is
+complete. A file that was already at the local path stays as it was.
 
 ```python
 ondio.download("gs://my-bucket/audio/rec.flac", "data/rec.flac")
@@ -164,13 +167,14 @@ its `__cause__`.
 | --- | --- |
 | `ObjectNotFoundError` | No object at the URI |
 | `AuthError` | Missing, wrong or expired credentials, or access refused |
-| `NetworkError` | No answer from the store: the connection failed or closed, or it timed out. The request can be retried |
+| `NetworkError` | No full answer from the store: the connection failed or closed, the response stopped in the middle, or it timed out. The request can be retried |
 | `UnsupportedOperationError` | The backend cannot do this, e.g. `write` over HTTP |
 | `ObjectExistsError` | `create` found an object at the URI |
 | `OndioError` | Any other storage failure |
 
 A bad request raises `ValueError`, not `OndioError`: an inverted byte range, a
-FLAC window that is empty, or a malformed URI. So code that falls back to another
+FLAC window that is empty, a malformed URI, or an S3 request that `botocore`
+refuses before sending it, such as one with an empty key. So code that falls back to another
 source can catch `OndioError` for "the fetch failed" and let `ValueError` show a bug.
 
 ```python

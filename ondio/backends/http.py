@@ -10,8 +10,8 @@ from __future__ import annotations
 import contextlib
 import os
 import threading
-from pathlib import Path
 
+from ondio.backends.protocol import _replace_on_success
 from ondio.types import (
     AuthError,
     NetworkError,
@@ -103,7 +103,12 @@ class HttpBackend:
             yield
         except (exceptions.InvalidURL, exceptions.MissingSchema, exceptions.InvalidSchema):
             raise  # already ValueErrors: a bad request, not a failed fetch
-        except (exceptions.ConnectionError, exceptions.Timeout) as exc:
+        # ChunkedEncodingError: the body stopped in the middle.
+        except (
+            exceptions.ConnectionError,
+            exceptions.Timeout,
+            exceptions.ChunkedEncodingError,
+        ) as exc:
             raise NetworkError(f"HTTP request failed for {uri}: {type(exc).__name__}") from exc
         except exceptions.RequestException as exc:
             raise OndioError(f"HTTP request failed for {uri}: {type(exc).__name__}") from exc
@@ -170,11 +175,13 @@ class HttpBackend:
         return int(length)
 
     def download(self, uri: str, out_path: str | os.PathLike[str]) -> None:
-        dest = Path(out_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        with self._translate(uri), self._get(uri, stream=True) as response:
+        with (
+            _replace_on_success(out_path) as temporary,
+            self._translate(uri),
+            self._get(uri, stream=True) as response,
+        ):
             self._check_status(uri, response)
-            with open(dest, "wb") as f:
+            with open(temporary, "wb") as f:
                 for chunk in response.iter_content(_CHUNK):
                     f.write(chunk)
 

@@ -459,3 +459,25 @@ def test_read_range_with_a_given_backend(tmp_path):
     with pytest.raises(ValueError, match="region_name"):
         ondio.read_range("s3://b/a.bin", 1, 2, backend=fake, region_name="x")
     assert fake.calls == 1
+
+
+def test_failed_local_download_leaves_no_partial_file(tmp_path, monkeypatch):
+    import shutil
+
+    src = tmp_path / "src.bin"
+    src.write_bytes(b"0123456789")
+    out = tmp_path / "out"
+    out.mkdir()
+    dest = out / "a.bin"
+    dest.write_bytes(b"older copy")
+
+    def broken(source, target):
+        with open(target, "wb") as stream:
+            stream.write(b"part")
+        raise OSError(errno.ENOSPC, "no space left")
+
+    monkeypatch.setattr(shutil, "copyfile", broken)
+    with pytest.raises(OSError):
+        ondio.download(str(src), dest)
+    assert dest.read_bytes() == b"older copy"
+    assert [p.name for p in out.iterdir()] == ["a.bin"]

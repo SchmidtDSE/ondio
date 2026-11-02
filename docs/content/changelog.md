@@ -26,6 +26,10 @@ needs no change.
   ignored since 0.3.0.
 - **The `gcs` extra needs `google-cloud-storage` 3 or later.** `create` already
   needed it; now every GCS call does.
+- **A failed `download` leaves no partial file**, on every backend. A file already
+  at the local path is kept.
+- **An S3 request that `botocore` refuses before sending it is `ValueError`**, for
+  example one with an empty key. Before, `ParamValidationError` escaped.
 
 **New:**
 

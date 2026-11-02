@@ -170,18 +170,42 @@ class TestFailures:
             assert isinstance(raised.value.__cause__, exc)
 
     def test_other_request_error_is_an_ondio_error(self, requests_mock, tmp_path):
+        requests_mock.get(URL, exc=requests.exceptions.TooManyRedirects)
+        with pytest.raises(ondio.OndioError) as raised:
+            HttpBackend().download(URL, tmp_path / "a.bin")
+        assert not isinstance(raised.value, ondio.NetworkError)
+
+    def test_broken_body_is_a_network_error(self, requests_mock):
         requests_mock.get(URL, exc=requests.exceptions.ChunkedEncodingError)
-        with pytest.raises(ondio.OndioError):
-            HttpBackend().download(URL, tmp_path / "a.bin")
+        with pytest.raises(ondio.NetworkError):
+            HttpBackend().read(URL)
 
-    def test_body_loop_failure_is_translated(self, requests_mock, tmp_path):
+    def test_failed_download_leaves_no_partial_file(self, requests_mock, tmp_path):
         class Body(io.RawIOBase):
-            def readinto(self, buffer):
-                raise requests.exceptions.ChunkedEncodingError("cut off")
+            def __init__(self):
+                self.sent = False
 
+            def readinto(self, buffer):
+                if self.sent:
+                    raise requests.exceptions.ChunkedEncodingError("cut off")
+                self.sent = True
+                buffer[:4] = b"part"
+                return 4
+
+        dest = tmp_path / "a.bin"
+        dest.write_bytes(b"older copy")
         requests_mock.get(URL, body=Body())
-        with pytest.raises(ondio.OndioError):
-            HttpBackend().download(URL, tmp_path / "a.bin")
+        with pytest.raises(ondio.NetworkError):
+            HttpBackend().download(URL, dest)
+        assert dest.read_bytes() == b"older copy"
+        assert [p.name for p in tmp_path.iterdir()] == ["a.bin"]
+
+    def test_download_file_has_normal_permissions(self, requests_mock, tmp_path):
+        requests_mock.get(URL, content=CONTENT)
+        HttpBackend().download(URL, tmp_path / "a.bin")
+        reference = tmp_path / "reference"
+        reference.write_bytes(b"")
+        assert (tmp_path / "a.bin").stat().st_mode == reference.stat().st_mode
 
     @pytest.mark.parametrize("url", ["http://", "http://exa mple.com:x/a"])
     def test_bad_url_is_a_value_error(self, url):

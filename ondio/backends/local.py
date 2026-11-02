@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
-from ondio.backends.protocol import _matches_filters
+from ondio.backends.protocol import _matches_filters, _replace_on_success
 from ondio.types import AuthError, ObjectExistsError, ObjectNotFoundError, OndioError
 
 def _is_file_uri(uri: str) -> bool:
@@ -107,9 +107,8 @@ class LocalBackend:
         src = _to_path(uri)
         if not src.is_file():
             raise ObjectNotFoundError(f"no such object: {uri}")
-        dest = Path(out_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(src, dest)
+        with _replace_on_success(out_path) as temporary:
+            shutil.copyfile(src, temporary)
 
     def upload(self, uri: str, source_path: str | os.PathLike[str]) -> None:
         path = _to_path(uri)
