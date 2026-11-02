@@ -442,3 +442,25 @@ def test_failed_download_leaves_no_partial_file(backend, monkeypatch, tmp_path):
         backend.download(f"{PREFIX}/audio/chunk_001.flac", dest)
     assert dest.read_bytes() == b"older copy"
     assert [p.name for p in tmp_path.iterdir()] == ["a.flac"]
+
+
+class TestAnonymous:
+    def test_anonymous_client_has_no_credentials_and_no_project(self):
+        from google.auth.credentials import AnonymousCredentials
+
+        backend = GcsBackend(anonymous=True)
+        assert isinstance(backend._client._credentials, AnonymousCredentials)
+        assert backend._client.project is None
+
+    def test_anonymous_keeps_the_endpoint(self):
+        backend = GcsBackend(anonymous=True, endpoint_url=ENDPOINT)
+        assert backend._client._connection.API_BASE_URL == ENDPOINT
+
+    @pytest.mark.parametrize("option", [{"project": "p"}, {"credentials": object()}])
+    def test_anonymous_refuses_other_options(self, option):
+        with pytest.raises(ValueError, match=next(iter(option))):
+            GcsBackend(anonymous=True, **option)
+
+    def test_anonymous_with_client_is_refused(self, store):
+        with pytest.raises(ValueError, match="anonymous"):
+            GcsBackend(client=FakeClient(store), anonymous=True)

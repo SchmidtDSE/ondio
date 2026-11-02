@@ -170,3 +170,9 @@ def test_an_option_with_no_variable_is_refused_without_its_value(uri, options):
 def test_get_environment_refuses_an_unknown_scheme():
     with pytest.raises(UnknownPlatformError):
         get_environment("ftp://host/key")
+
+
+@pytest.mark.parametrize("uri", ["file:///tmp/x", "https://example.com/x"])
+def test_backends_with_no_credentials_refuse_anonymous(uri):
+    with pytest.raises(TypeError):
+        get_backend(uri, anonymous=True)

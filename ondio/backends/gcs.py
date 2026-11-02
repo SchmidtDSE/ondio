@@ -54,15 +54,21 @@ class GcsBackend:
             credentials. `None` uses the client's own choice.
         client: A `google.cloud.storage.Client` to use as given. No other
             option can be given with it.
+        anonymous: Send requests with no credentials and no project, for a
+            public bucket. Only `endpoint_url` can be given with it. A request
+            to a bucket that is not public is then an `AuthError`.
         **client_kwargs: Forwarded to `google.cloud.storage.Client`
             (e.g. `project`).
 
     Raises:
-        ValueError: If both `endpoint_url` and `client_options` are given, or
-            `client` with another option.
+        ValueError: If both `endpoint_url` and `client_options` are given,
+            `client` with another option, or `anonymous` with an option other
+            than `endpoint_url`.
     """
 
-    def __init__(self, endpoint_url: str | None = None, *, client=None, **client_kwargs):
+    def __init__(
+        self, endpoint_url: str | None = None, *, client=None, anonymous: bool = False, **client_kwargs
+    ):
         try:
             from google.cloud import storage
         except ImportError as exc:
@@ -70,10 +76,27 @@ class GcsBackend:
                 "gs:// support requires the 'gcs' extra: pip install ondio[gcs]"
             ) from exc
         if client is not None:
-            options = sorted([*client_kwargs, *(["endpoint_url"] if endpoint_url is not None else [])])
+            options = sorted([
+                *client_kwargs,
+                *(["endpoint_url"] if endpoint_url is not None else []),
+                *(["anonymous"] if anonymous else []),
+            ])
             if options:
                 raise ValueError(f"give client or {', '.join(options)}, not both")
             self._client = client
+            return
+        if anonymous:
+            if client_kwargs:
+                raise ValueError(f"give anonymous or {', '.join(sorted(client_kwargs))}, not both")
+            from google.auth.credentials import AnonymousCredentials
+
+            options = {"api_endpoint": endpoint_url} if endpoint_url is not None else None
+            # As storage.Client.create_anonymous_client does, which takes no endpoint.
+            with self._translate("the new GCS client"):
+                self._client = storage.Client(
+                    project="<none>", credentials=AnonymousCredentials(), client_options=options
+                )
+            self._client.project = None
             return
         if endpoint_url is not None:
             # If both are given, one could silently override the other.

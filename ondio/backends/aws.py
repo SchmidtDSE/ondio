@@ -80,27 +80,48 @@ class AwsBackend:
     Args:
         endpoint_url: The S3 endpoint, for a store that is not AWS (e.g. RustFS).
             `None` uses `boto3`'s own choice.
-        client: An S3 client to use as given, e.g. one made with
-            `Config(signature_version=UNSIGNED)` for a public bucket. No other
-            option can be given with it.
+        client: An S3 client to use as given. No other option can be given
+            with it.
+        anonymous: Send unsigned requests, with no credentials, for a public
+            bucket. Only `endpoint_url` and `region_name` can be given with it.
+            A request to a bucket that is not public is then an `AuthError`.
         **session_kwargs: Forwarded to `boto3.Session` (e.g. `profile_name`,
             `region_name`).
 
     Raises:
-        ValueError: If `client` is given with another option.
+        ValueError: If `client` is given with another option, or `anonymous`
+            with an option other than `endpoint_url` and `region_name`.
     """
 
-    def __init__(self, endpoint_url: str | None = None, *, client=None, **session_kwargs):
+    def __init__(
+        self, endpoint_url: str | None = None, *, client=None, anonymous: bool = False, **session_kwargs
+    ):
         if client is not None:
-            options = sorted([*session_kwargs, *(["endpoint_url"] if endpoint_url is not None else [])])
+            options = sorted([
+                *session_kwargs,
+                *(["endpoint_url"] if endpoint_url is not None else []),
+                *(["anonymous"] if anonymous else []),
+            ])
             if options:
                 raise ValueError(f"give client or {', '.join(options)}, not both")
             self._client = client
             return
+        config = None
+        if anonymous:
+            # The names only: a value could be a secret.
+            refused = sorted(set(session_kwargs) - {"region_name"})
+            if refused:
+                raise ValueError(f"give anonymous or {', '.join(refused)}, not both")
+            from botocore import UNSIGNED
+            from botocore.config import Config
+
+            config = Config(signature_version=UNSIGNED)
         import boto3
 
         with self._translate("the new S3 client"):
-            self._client = boto3.Session(**session_kwargs).client("s3", endpoint_url=endpoint_url)
+            self._client = boto3.Session(**session_kwargs).client(
+                "s3", endpoint_url=endpoint_url, config=config
+            )
 
     @contextlib.contextmanager
     def _translate(self, uri: str):

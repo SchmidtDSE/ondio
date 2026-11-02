@@ -468,3 +468,46 @@ def test_a_body_cut_short_is_a_network_error(prefix, monkeypatch):
     monkeypatch.setattr(backend._client, "get_object", lambda **kwargs: {"Body": Body()})
     with pytest.raises(ondio.NetworkError):
         backend.read(f"{prefix}/k")
+
+
+class _FakeSession:
+    def client(self, *args, **kwargs):
+        return object()
+
+
+class TestAnonymous:
+    def test_anonymous_client_is_unsigned(self):
+        from botocore import UNSIGNED
+
+        backend = AwsBackend(anonymous=True, region_name="eu-west-1", endpoint_url=ENDPOINT)
+        assert backend._client.meta.config.signature_version is UNSIGNED
+        assert backend._client.meta.region_name == "eu-west-1"
+        assert backend._client.meta.endpoint_url == ENDPOINT
+
+    def test_anonymous_through_the_dispatcher_reads_a_public_object(self, prefix):
+        AwsBackend()._client.put_object(Bucket=prefix.removeprefix("s3://"), Key="pub.bin", Body=b"open", ACL="public-read")
+        assert ondio.read(f"{prefix}/pub.bin", anonymous=True) == b"open"
+
+    def test_anonymous_read_of_a_private_object_is_an_auth_error(self, prefix):
+        ondio.write(f"{prefix}/private.bin", b"closed")
+        with pytest.raises(ondio.AuthError):
+            ondio.read(f"{prefix}/private.bin", anonymous=True)
+
+    @pytest.mark.parametrize("option", [
+        {"profile_name": "secret-profile"}, {"aws_access_key_id": "secret-id"}, {"aws_session_token": "t0ken"},
+    ])
+    def test_anonymous_refuses_credential_options_by_name(self, option):
+        with pytest.raises(ValueError) as info:
+            AwsBackend(anonymous=True, **option)
+        name, value = next(iter(option.items()))
+        assert name in str(info.value) and value not in str(info.value)
+
+    def test_anonymous_with_client_is_refused(self):
+        with pytest.raises(ValueError, match="anonymous"):
+            AwsBackend(client=object(), anonymous=True)
+
+    def test_anonymous_false_is_the_same_as_not_giving_it(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr("boto3.Session", lambda **kw: calls.append(kw) or _FakeSession())
+        AwsBackend(anonymous=False, profile_name="p")
+        assert calls == [{"profile_name": "p"}]
