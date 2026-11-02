@@ -107,9 +107,7 @@ def store():
 
 @pytest.fixture
 def backend(store):
-    instance = GcsBackend.__new__(GcsBackend)
-    instance._client = FakeClient(store)
-    return instance
+    return GcsBackend(client=FakeClient(store))
 
 
 class TestReadWrite:
@@ -393,3 +391,15 @@ class TestTranslation:
 
     def test_range_past_eof_still_returns_empty(self, backend):
         assert backend.read_range(f"{PREFIX}/audio/chunk_001.flac", 50, 60) == b""
+
+
+class TestGivenClient:
+    def test_the_given_client_is_used(self, store):
+        client = FakeClient(store)
+        assert GcsBackend(client=client)._client is client
+
+    @pytest.mark.parametrize("option", [{"project": "secret-project-7"}, {"endpoint_url": "http://x"}])
+    def test_client_with_another_option_is_refused(self, store, option):
+        with pytest.raises(ValueError) as raised:
+            GcsBackend(client=FakeClient(store), **option)
+        assert next(iter(option.values())) not in str(raised.value)

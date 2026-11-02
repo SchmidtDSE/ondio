@@ -78,11 +78,23 @@ class AwsBackend:
     Args:
         endpoint_url: The S3 endpoint, for a store that is not AWS (e.g. RustFS).
             `None` uses `boto3`'s own choice.
+        client: An S3 client to use as given, e.g. one made with
+            `Config(signature_version=UNSIGNED)` for a public bucket. No other
+            option can be given with it.
         **session_kwargs: Forwarded to `boto3.Session` (e.g. `profile_name`,
             `region_name`).
+
+    Raises:
+        ValueError: If `client` is given with another option.
     """
 
-    def __init__(self, endpoint_url: str | None = None, **session_kwargs):
+    def __init__(self, endpoint_url: str | None = None, *, client=None, **session_kwargs):
+        if client is not None:
+            options = sorted([*session_kwargs, *(["endpoint_url"] if endpoint_url is not None else [])])
+            if options:
+                raise ValueError(f"give client or {', '.join(options)}, not both")
+            self._client = client
+            return
         import boto3
 
         with self._translate("S3 client setup"):

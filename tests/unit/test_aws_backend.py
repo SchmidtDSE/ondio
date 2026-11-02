@@ -391,3 +391,31 @@ class TestErrorTranslation:
     def test_read_range_past_eof_still_returns_empty(self, prefix):
         ondio.write(f"{prefix}/k", b"0123456789")
         assert get_backend(f"{prefix}/k").read_range(f"{prefix}/k", 50, 60) == b""
+
+
+class TestGivenClient:
+    def test_a_given_client_is_used(self, prefix):
+        boto3 = pytest.importorskip("boto3")
+        client = boto3.client("s3", region_name="us-east-1")
+        ondio.write(f"{prefix}/k", b"abc")
+        backend = AwsBackend(client=client)
+        assert backend._client is client
+        assert backend.read(f"{prefix}/k") == b"abc"
+
+    def test_an_unsigned_client_is_accepted(self):
+        boto3 = pytest.importorskip("boto3")
+        from botocore import UNSIGNED
+        from botocore.config import Config
+
+        client = boto3.client("s3", region_name="us-east-1", config=Config(signature_version=UNSIGNED))
+        assert AwsBackend(client=client)._client is client
+
+    @pytest.mark.parametrize("option", [{"endpoint_url": "http://x"}, {"region_name": "eu-west-1"}])
+    def test_client_with_another_option_is_refused(self, option):
+        boto3 = pytest.importorskip("boto3")
+        with pytest.raises(ValueError) as raised:
+            AwsBackend(client=boto3.client("s3", region_name="us-east-1"), **option)
+        assert str(next(iter(option.values()))) not in str(raised.value)
+
+    def test_endpoint_url_is_still_the_first_positional_argument(self):
+        assert AwsBackend("http://127.0.0.1:9")._client.meta.endpoint_url == "http://127.0.0.1:9"

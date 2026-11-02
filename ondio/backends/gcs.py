@@ -42,20 +42,29 @@ class GcsBackend:
     Args:
         endpoint_url: The GCS API endpoint. The client still uses its normal
             credentials. `None` uses the client's own choice.
+        client: A `google.cloud.storage.Client` to use as given. No other
+            option can be given with it.
         **client_kwargs: Forwarded to `google.cloud.storage.Client`
             (e.g. `project`).
 
     Raises:
-        ValueError: If both `endpoint_url` and `client_options` are given.
+        ValueError: If both `endpoint_url` and `client_options` are given, or
+            `client` with another option.
     """
 
-    def __init__(self, endpoint_url: str | None = None, **client_kwargs):
+    def __init__(self, endpoint_url: str | None = None, *, client=None, **client_kwargs):
         try:
             from google.cloud import storage
         except ImportError as exc:
             raise ImportError(
                 "gs:// support requires the 'gcs' extra: pip install ondio[gcs]"
             ) from exc
+        if client is not None:
+            options = sorted([*client_kwargs, *(["endpoint_url"] if endpoint_url is not None else [])])
+            if options:
+                raise ValueError(f"give client or {', '.join(options)}, not both")
+            self._client = client
+            return
         if endpoint_url is not None:
             # If both are given, one could silently override the other.
             if "client_options" in client_kwargs:
