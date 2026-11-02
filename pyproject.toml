@@ -13,7 +13,7 @@ license = "BSD-3-Clause"
 license-files = ["LICENSE.md"]
 authors = [{ name = "Michael Catchen", email = "mdcatchen@gmail.com" }]
 requires-python = ">= 3.11"
-version = "0.3.1"
+version = "0.4.0"
 
 [project.urls]
 Documentation = "https://schmidtdse.github.io/ondio/"
@@ -21,7 +21,7 @@ Changelog = "https://schmidtdse.github.io/ondio/changelog/"
 Source = "https://github.com/SchmidtDSE/ondio"
 
 [project.optional-dependencies]
-gcs = ["google-cloud-storage"]
+gcs = ["google-cloud-storage>=3"]
 parquet = ["pyarrow"]
 http = ["requests"]
 

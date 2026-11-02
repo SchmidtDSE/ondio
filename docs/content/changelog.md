@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.4.0 (unreleased)
+## 0.4.0 - 2026-11-02
 
 This release changes error types and HTTP behavior. Code that catches `OndioError`
 needs no change.

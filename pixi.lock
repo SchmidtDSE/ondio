@@ -10869,7 +10869,7 @@ packages:
   - boto3>=1.42,<2
   - numpy
   - soundfile>=0.12.1
-  - google-cloud-storage ; extra == 'gcs'
+  - google-cloud-storage>=3 ; extra == 'gcs'
   - pyarrow ; extra == 'parquet'
   - requests ; extra == 'http'
   requires_python: '>=3.11'
