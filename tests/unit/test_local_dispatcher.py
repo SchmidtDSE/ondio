@@ -9,6 +9,7 @@ import pytest
 
 import ondio
 from ondio import Location, ObjectExistsError, ObjectNotFoundError, OndioError
+from ondio.backends import LocalBackend
 from ondio.registry import get_backend
 
 
@@ -356,3 +357,96 @@ class TestCreate:
             thread.join()
         assert len(winners) == 1 and len(losers) == 7
         assert ondio.read(uri) == f"writer {winners[0]}".encode()
+
+
+class S3OnDisk:
+    """A test backend that serves s3:// URIs from a directory, as JBA's fake does."""
+
+    def __init__(self, root):
+        self._root = root
+        self._local = LocalBackend()
+        self.calls = 0
+
+    def _path(self, uri):
+        return str(self._root / uri.removeprefix("s3://"))
+
+    def __getattr__(self, name):
+        method = getattr(self._local, name)
+
+        def call(uri, *args, **kwargs):
+            self.calls += 1
+            return method(self._path(uri), *args, **kwargs)
+
+        return call
+
+
+class TestGivenBackend:
+    def test_a_given_backend_serves_read_flac(self, tmp_path, fx):
+        (tmp_path / "b").mkdir()
+        (tmp_path / "b" / "a.flac").write_bytes(fx.path.read_bytes())
+        fake = S3OnDisk(tmp_path)
+        samples, rate = ondio.read_flac("s3://b/a.flac", 0.0, 0.5, use_range=True, backend=fake)
+        assert rate == fx.sr
+        assert len(samples) == round(0.5 * rate)
+        assert fake.calls > 0
+
+    def test_a_given_backend_serves_object_calls(self, tmp_path):
+        (tmp_path / "b").mkdir()
+        fake = S3OnDisk(tmp_path)
+        ondio.write("s3://b/a.bin", b"abc", backend=fake)
+        ondio.write_json("s3://b/a.json", {"k": 1}, backend=fake)
+        assert ondio.read("s3://b/a.bin", backend=fake) == b"abc"
+        assert ondio.read_json("s3://b/a.json", backend=fake) == {"k": 1}
+        assert ondio.exists("s3://b/a.bin", backend=fake)
+        ondio.create("s3://b/c.bin", b"c", backend=fake)
+        assert ondio.object_count("s3://b", backend=fake) == 3
+        ondio.download("s3://b/a.bin", tmp_path / "out.bin", backend=fake)
+        assert (tmp_path / "out.bin").read_bytes() == b"abc"
+        ondio.upload("s3://b/d.bin", tmp_path / "out.bin", backend=fake)
+        ondio.delete("s3://b/a.bin", backend=fake)
+        assert not (tmp_path / "b" / "a.bin").exists()
+        assert (tmp_path / "b" / "d.bin").read_bytes() == b"abc"
+
+    def test_download_files_shares_the_backend(self, tmp_path):
+        (tmp_path / "b").mkdir()
+        for name in ("x.bin", "y.bin"):
+            (tmp_path / "b" / name).write_bytes(name.encode())
+        fake = S3OnDisk(tmp_path)
+        out = ondio.download_files(["s3://b/x.bin", "s3://b/y.bin"], tmp_path / "out", backend=fake)
+        assert [Path(p).name for p in out] == ["x.bin", "y.bin"]
+        assert fake.calls == 2
+
+    @pytest.mark.parametrize("call", [
+        lambda b: ondio.read("s3://b/a", backend=b, region_name="x"),
+        lambda b: ondio.download("s3://b/a", "out", backend=b, region_name="x"),
+        lambda b: ondio.download_files(["s3://b/a"], "out", backend=b, region_name="x"),
+        lambda b: ondio.write("s3://b/a", b"x", backend=b, region_name="x"),
+        lambda b: ondio.create("s3://b/a", b"x", backend=b, region_name="x"),
+        lambda b: ondio.write_json("s3://b/a", 1, backend=b, region_name="x"),
+        lambda b: ondio.read_json("s3://b/a", backend=b, region_name="x"),
+        lambda b: ondio.upload("s3://b/a", __file__, backend=b, region_name="x"),
+        lambda b: ondio.list_files("s3://b/", backend=b, region_name="x"),
+        lambda b: ondio.object_count("s3://b/", backend=b, region_name="x"),
+        lambda b: ondio.exists("s3://b/a", backend=b, region_name="x"),
+        lambda b: ondio.delete("s3://b/a", backend=b, region_name="x"),
+        lambda b: ondio.extract_flac_header("s3://b/a", backend=b, region_name="x"),
+        lambda b: ondio.read_flac("s3://b/a", backend=b, region_name="x"),
+        lambda b: ondio.download_flac("s3://b/a", "out", backend=b, region_name="x"),
+    ])
+    def test_backend_with_an_option_is_refused(self, tmp_path, call):
+        fake = S3OnDisk(tmp_path)
+        with pytest.raises(ValueError, match="region_name"):
+            call(fake)
+        assert fake.calls == 0
+
+    def test_create_lets_a_given_backend_decide(self):
+        class Recorder:
+            def __init__(self):
+                self.uris = []
+
+            def create(self, uri, data):
+                self.uris.append(uri)
+
+        recorder = Recorder()
+        ondio.create("http://x/a", b"x", backend=recorder)
+        assert recorder.uris == ["http://x/a"]

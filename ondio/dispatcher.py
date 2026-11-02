@@ -2,6 +2,8 @@
 
 Every function accepts `**kwargs`, forwarded to the backend constructor (see
 [`get_backend`][ondio.registry.get_backend]) — not to the individual operation.
+Every function also accepts `backend=`, a backend to use instead of one built from
+the URI: build it once and pass it to many calls to reuse its client and connections.
 URIs are fully qualified: `s3://…`, `gs://…`, `http(s)://…`, `file://…`, or a
 plain local path. A `file:`, `s3://` or `gs://` URI with `?` or `#` is refused with
 `ValueError`, since the text after it would be dropped. A local file whose name has
@@ -23,31 +25,57 @@ import numpy as np
 
 from ondio import flac as _flac
 from ondio._log import printer
-from ondio.registry import detect_platform, get_backend
-from ondio.types import FlacHeader, OndioError, UnsupportedOperationError
+from ondio.backends.protocol import StorageBackend
+from ondio.registry import get_backend
+from ondio.types import FlacHeader, OndioError
 
-def read(uri: str, **kwargs: Any) -> bytes:
+
+def _refuse_options(backend: StorageBackend | None, kwargs: dict[str, Any]) -> None:
+    # The options would be ignored, so a caller who gives both has made a mistake.
+    if backend is not None and kwargs:
+        raise ValueError(f"give backend or {', '.join(sorted(kwargs))}, not both")
+
+
+def _resolve(uri: str, backend: StorageBackend | None, kwargs: dict[str, Any]) -> StorageBackend:
+    """`backend` if given, else the backend that `get_backend` builds for `uri`."""
+    _refuse_options(backend, kwargs)
+    return backend if backend is not None else get_backend(uri, **kwargs)
+
+
+def read(uri: str, *, backend: StorageBackend | None = None, **kwargs: Any) -> bytes:
     """Read the full object at `uri` into memory.
 
     Args:
         uri: Fully-qualified storage URI.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
         The object's bytes.
     """
-    return get_backend(uri, **kwargs).read(uri)
+    return _resolve(uri, backend, kwargs).read(uri)
 
 
-def download(uri: str, out_path: str | os.PathLike[str], **kwargs: Any) -> None:
+def download(
+    uri: str,
+    out_path: str | os.PathLike[str],
+    *,
+    backend: StorageBackend | None = None,
+    **kwargs: Any,
+) -> None:
     """Stream the object at `uri` to a local path, creating parent directories.
 
     Args:
         uri: Fully-qualified storage URI.
         out_path: Local destination path; parent directories are created.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
     """
-    get_backend(uri, **kwargs).download(uri, out_path)
+    _resolve(uri, backend, kwargs).download(uri, out_path)
     printer.message(f"downloaded {uri} to {out_path}")
 
 
@@ -56,6 +84,7 @@ def download_files(
     local_dir: str | os.PathLike[str],
     *,
     max_workers: int | None = None,
+    backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> list[str]:
     """Download each object in `uris` into `local_dir`, named by its basename.
@@ -75,6 +104,9 @@ def download_files(
             When `uris` is empty nothing happens and the directory is not
             created.
         max_workers: Thread-pool size for the concurrent downloads.
+        backend: A backend to use for every URI instead of one built per URI.
+            All threads share it. S3 clients and `HttpBackend` are safe to
+            share; a `google-cloud-storage` client does not promise it.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
@@ -84,6 +116,7 @@ def download_files(
         ValueError: Before anything is downloaded — if a URI has an empty
             basename (a prefix-like URI), or if two URIs share a basename.
     """
+    _refuse_options(backend, kwargs)
     if not uris:
         return []
 
@@ -105,7 +138,9 @@ def download_files(
         jobs.append((uri, Path(local_dir) / name))
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = [executor.submit(download, uri, path, **kwargs) for uri, path in jobs]
+        futures = [
+            executor.submit(download, uri, path, backend=backend, **kwargs) for uri, path in jobs
+        ]
         try:
             for future in as_completed(futures):
                 future.result()
@@ -116,18 +151,21 @@ def download_files(
     return [str(path) for _, path in jobs]
 
 
-def write(uri: str, data: bytes, **kwargs: Any) -> None:
+def write(uri: str, data: bytes, *, backend: StorageBackend | None = None, **kwargs: Any) -> None:
     """Write raw bytes to `uri`.
 
     Args:
         uri: Fully-qualified storage URI to write to.
         data: The bytes to write.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
     """
-    get_backend(uri, **kwargs).write(uri, data)
+    _resolve(uri, backend, kwargs).write(uri, data)
 
 
-def create(uri: str, data: bytes, **kwargs: Any) -> None:
+def create(uri: str, data: bytes, *, backend: StorageBackend | None = None, **kwargs: Any) -> None:
     """Write raw bytes to `uri` only if no object exists there.
 
     A reader sees either no object or the complete one, never part of it. Supported
@@ -136,46 +174,61 @@ def create(uri: str, data: bytes, **kwargs: Any) -> None:
     Args:
         uri: Fully-qualified storage URI to write to.
         data: The bytes to write.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Raises:
         ObjectExistsError: If an object exists at `uri`. It is not changed. On S3
             and GCS it can be the object that this call wrote, if the client
             retried after a lost response: compare its bytes to know who wrote it.
-        UnsupportedOperationError: Over HTTP, before backend setup.
+        UnsupportedOperationError: Over HTTP (`HttpBackend` refuses it).
         OndioError: For any other failure. This does not prove that nothing was
             written: read `uri` to find out.
     """
-    if detect_platform(uri) == "url":
-        raise UnsupportedOperationError(f"create is not supported for {uri!r}")
-    get_backend(uri, **kwargs).create(uri, data)
+    _resolve(uri, backend, kwargs).create(uri, data)
 
 
-def write_json(uri: str, data: Any, **kwargs: Any) -> None:
+def write_json(
+    uri: str, data: Any, *, backend: StorageBackend | None = None, **kwargs: Any
+) -> None:
     """Serialize `data` as JSON (UTF-8, `ensure_ascii=False`) and upload it to `uri`.
 
     Args:
         uri: Fully-qualified storage URI to write to.
         data: Any `json.dumps`-serializable value.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
     """
-    write(uri, json.dumps(data, ensure_ascii=False).encode("utf-8"), **kwargs)
+    write(uri, json.dumps(data, ensure_ascii=False).encode("utf-8"), backend=backend, **kwargs)
 
 
-def read_json(uri: str, **kwargs: Any) -> Any:
+def read_json(uri: str, *, backend: StorageBackend | None = None, **kwargs: Any) -> Any:
     """Read and parse the JSON object at `uri`.
 
     Args:
         uri: Fully-qualified storage URI of a JSON document.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
         The parsed JSON value (`dict`, `list`, `str`, number, `bool`, or `None`).
     """
-    return json.loads(read(uri, **kwargs))
+    return json.loads(read(uri, backend=backend, **kwargs))
 
 
-def upload(uri: str, source_path: str | os.PathLike[str], **kwargs: Any) -> None:
+def upload(
+    uri: str,
+    source_path: str | os.PathLike[str],
+    *,
+    backend: StorageBackend | None = None,
+    **kwargs: Any,
+) -> None:
     """Upload a local file to `uri`, streaming it from disk.
 
     The file is sent without being read into memory. An existing object at
@@ -184,14 +237,18 @@ def upload(uri: str, source_path: str | os.PathLike[str], **kwargs: Any) -> None
     Args:
         uri: Fully-qualified storage URI to write to.
         source_path: Local file to upload.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Raises:
         FileNotFoundError: If `source_path` is not an existing file.
     """
+    _refuse_options(backend, kwargs)
     if not Path(source_path).is_file():
         raise FileNotFoundError(f"no such file to upload: {source_path}")
-    get_backend(uri, **kwargs).upload(uri, source_path)
+    _resolve(uri, backend, kwargs).upload(uri, source_path)
     printer.message(f"uploaded {source_path} to {uri}")
 
 
@@ -202,6 +259,7 @@ def list_files(
     max_items: int | None = None,
     required_prefix: str | None = None,
     required_ext: str | None = None,
+    backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> list[str]:
     """List full URIs under a prefix, lexicographically sorted.
@@ -222,12 +280,15 @@ def list_files(
             with this (applied to every recursively listed key).
         required_ext: If given, list only objects with this file extension
             (with or without the leading dot).
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
         Full URIs (never bare keys), sorted; empty if nothing matches.
     """
-    return get_backend(uri_prefix, **kwargs).list_files(
+    return _resolve(uri_prefix, backend, kwargs).list_files(
         uri_prefix,
         recursive=recursive,
         max_items=max_items,
@@ -240,6 +301,7 @@ def object_count(
     *,
     required_prefix: str | None = None,
     required_ext: str | None = None,
+    backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> int:
     """Count objects under a prefix (always recursive) without building URI lists.
@@ -257,46 +319,60 @@ def object_count(
             with this (applied to every recursively listed key).
         required_ext: If given, count only objects with this file extension
             (with or without the leading dot).
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
         The number of matching objects.
     """
-    return get_backend(uri_prefix, **kwargs).object_count(
+    return _resolve(uri_prefix, backend, kwargs).object_count(
         uri_prefix, required_prefix=required_prefix, required_ext=required_ext
     )
 
 
-def exists(uri: str, **kwargs: Any) -> bool:
+def exists(uri: str, *, backend: StorageBackend | None = None, **kwargs: Any) -> bool:
     """Whether `uri` addresses an existing object.
 
     Args:
         uri: Fully-qualified storage URI.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
         `True` if the object exists (directories/prefixes do not count).
     """
-    return get_backend(uri, **kwargs).exists(uri)
+    return _resolve(uri, backend, kwargs).exists(uri)
 
 
-def delete(uri: str, **kwargs: Any) -> None:
+def delete(uri: str, *, backend: StorageBackend | None = None, **kwargs: Any) -> None:
     """Delete the object at `uri`. Idempotent: a missing object is a no-op.
 
     Args:
         uri: Fully-qualified storage URI.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
     """
-    get_backend(uri, **kwargs).delete(uri)
+    _resolve(uri, backend, kwargs).delete(uri)
 
 
-def extract_flac_header(uri: str, **kwargs: Any) -> FlacHeader:
+def extract_flac_header(
+    uri: str, *, backend: StorageBackend | None = None, **kwargs: Any
+) -> FlacHeader:
     """Parse the STREAMINFO of the FLAC file at `uri`, fetching only header bytes.
 
     Metadata block bodies (e.g. embedded artwork) are skipped, not downloaded.
 
     Args:
         uri: Fully-qualified storage URI of a FLAC file.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
@@ -305,7 +381,7 @@ def extract_flac_header(uri: str, **kwargs: Any) -> FlacHeader:
     Raises:
         OndioError: If `uri` is not a valid FLAC stream.
     """
-    return _flac.extract_flac_header(get_backend(uri, **kwargs), uri)
+    return _flac.extract_flac_header(_resolve(uri, backend, kwargs), uri)
 
 
 @overload
@@ -317,6 +393,7 @@ def read_flac(
     decode: Literal[True] = True,
     padding_ratio: float = 0.25,
     use_range: bool | None = None,
+    backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> tuple[np.ndarray, int]: ...
 
@@ -330,6 +407,7 @@ def read_flac(
     decode: Literal[False],
     padding_ratio: float = 0.25,
     use_range: bool | None = None,
+    backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> bytes: ...
 
@@ -342,6 +420,7 @@ def read_flac(
     decode: bool = True,
     padding_ratio: float = 0.25,
     use_range: bool | None = None,
+    backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> tuple[np.ndarray, int] | bytes:
     """Read a FLAC file — whole, or a `[start_sec, end_sec]` window — into memory.
@@ -364,6 +443,9 @@ def read_flac(
         use_range: Fetch strategy. `None` (default) picks automatically: ranged
             download for files > 50 MB when the window is < 1/3 of the stream,
             full download otherwise. `True`/`False` forces one path.
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Returns:
@@ -395,7 +477,7 @@ def read_flac(
     # Deprecation shim, removed with padding_ratio in 0.4.
     _flac._check_padding_ratio(padding_ratio, stacklevel=3)
     return _flac.read_flac(
-        get_backend(uri, **kwargs), uri, start_sec, end_sec,
+        _resolve(uri, backend, kwargs), uri, start_sec, end_sec,
         decode=decode, padding_ratio=_flac._DEFAULT_PADDING_RATIO, use_range=use_range,
     )
 
@@ -408,6 +490,7 @@ def download_flac(
     *,
     padding_ratio: float = 0.25,
     use_range: bool | None = None,
+    backend: StorageBackend | None = None,
     **kwargs: Any,
 ) -> None:
     """Download a FLAC file — whole, or a `[start_sec, end_sec]` window — to a local path.
@@ -427,6 +510,9 @@ def download_flac(
         end_sec: Window end in seconds; `None` means to the end of the stream.
         padding_ratio: As in [`read_flac`][ondio.dispatcher.read_flac].
         use_range: As in [`read_flac`][ondio.dispatcher.read_flac].
+        backend: A backend to use instead of one built from `uri` and `kwargs`.
+            Build it once and pass it to many calls to reuse its client and
+            connections.
         **kwargs: Forwarded to the backend constructor.
 
     Raises:
@@ -443,7 +529,7 @@ def download_flac(
     # Deprecation shim, removed with padding_ratio in 0.4.
     _flac._check_padding_ratio(padding_ratio, stacklevel=3)
     _flac.download_flac(
-        get_backend(uri, **kwargs), uri, out_path, start_sec, end_sec,
+        _resolve(uri, backend, kwargs), uri, out_path, start_sec, end_sec,
         padding_ratio=_flac._DEFAULT_PADDING_RATIO, use_range=use_range,
     )
 
