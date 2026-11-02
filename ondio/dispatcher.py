@@ -318,7 +318,7 @@ def list_files(
             with this (applied to every recursively listed key).
         required_ext: If given, list only objects with this file extension
             (with or without the leading dot).
-        backend: A backend to use instead of one built from `uri` and `kwargs`.
+        backend: A backend to use instead of one built from `uri_prefix` and `kwargs`.
             Build it once and pass it to many calls to reuse its client and
             connections.
         **kwargs: Forwarded to the backend constructor.
@@ -357,7 +357,7 @@ def object_count(
             with this (applied to every recursively listed key).
         required_ext: If given, count only objects with this file extension
             (with or without the leading dot).
-        backend: A backend to use instead of one built from `uri` and `kwargs`.
+        backend: A backend to use instead of one built from `uri_prefix` and `kwargs`.
             Build it once and pass it to many calls to reuse its client and
             connections.
         **kwargs: Forwarded to the backend constructor.
@@ -429,7 +429,6 @@ def read_flac(
     end_sec: float | None = None,
     *,
     decode: Literal[True] = True,
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
     backend: StorageBackend | None = None,
     **kwargs: Any,
@@ -443,7 +442,6 @@ def read_flac(
     end_sec: float | None = None,
     *,
     decode: Literal[False],
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
     backend: StorageBackend | None = None,
     **kwargs: Any,
@@ -456,7 +454,6 @@ def read_flac(
     end_sec: float | None = None,
     *,
     decode: bool = True,
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
     backend: StorageBackend | None = None,
     **kwargs: Any,
@@ -475,9 +472,6 @@ def read_flac(
             bytes of a standalone FLAC file — the original bytes exactly when
             no window is given (a plain read), a fresh lossless encode of
             the slice otherwise.
-        padding_ratio: Deprecated and ignored: ranged reads are
-            sample-exact. A value other than `0.25` emits a
-            `DeprecationWarning`; the argument will be removed in 0.4.
         use_range: Fetch strategy. `None` (default) picks automatically: ranged
             download for files > 50 MB when the window is < 1/3 of the stream,
             full download otherwise. `True`/`False` forces one path.
@@ -512,11 +506,9 @@ def read_flac(
         truncated region the ranged path raises `OndioError` naming
         `use_range=False`. It never starts a full download.
     """
-    # Deprecation shim, removed with padding_ratio in 0.4.
-    _flac._check_padding_ratio(padding_ratio, stacklevel=3)
     return _flac.read_flac(
         _resolve(uri, backend, kwargs), uri, start_sec, end_sec,
-        decode=decode, padding_ratio=_flac._DEFAULT_PADDING_RATIO, use_range=use_range,
+        decode=decode, use_range=use_range,
     )
 
 
@@ -526,7 +518,6 @@ def download_flac(
     start_sec: float | None = None,
     end_sec: float | None = None,
     *,
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
     backend: StorageBackend | None = None,
     **kwargs: Any,
@@ -546,7 +537,6 @@ def download_flac(
         out_path: Local `.flac` destination path; parent directories are created.
         start_sec: Window start in seconds; `None` means from the beginning.
         end_sec: Window end in seconds; `None` means to the end of the stream.
-        padding_ratio: As in [`read_flac`][ondio.dispatcher.read_flac].
         use_range: As in [`read_flac`][ondio.dispatcher.read_flac].
         backend: A backend to use instead of one built from `uri` and `kwargs`.
             Build it once and pass it to many calls to reuse its client and
@@ -564,11 +554,9 @@ def download_flac(
             - The source is not 8, 16 or 24 bits deep, so the window cannot
               be re-encoded.
     """
-    # Deprecation shim, removed with padding_ratio in 0.4.
-    _flac._check_padding_ratio(padding_ratio, stacklevel=3)
     _flac.download_flac(
         _resolve(uri, backend, kwargs), uri, out_path, start_sec, end_sec,
-        padding_ratio=_flac._DEFAULT_PADDING_RATIO, use_range=use_range,
+        use_range=use_range,
     )
 
 

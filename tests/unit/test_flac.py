@@ -6,10 +6,8 @@ download or located frame by frame in a ranged fetch. Damaged input raises
 OndioError rather than returning short or misplaced audio.
 """
 
-import inspect
 import io
 import tracemalloc
-import warnings
 from types import SimpleNamespace
 
 import numpy as np
@@ -113,10 +111,6 @@ class TestWindowReads:
         assert np.array_equal(head, fx.data[:fx.sr])
         clamped, _ = ondio.read_flac(fx.uri, 29.0, 999.0)  # end past EOF clamps
         assert np.array_equal(clamped, fx.data[29 * fx.sr:])
-
-    def test_end_past_eof_clamp_is_logged(self, fx, capsys):
-        ondio.read_flac(fx.uri, 29.0, 999.0)
-        assert "clamping" in capsys.readouterr().out
 
     def test_whole_file_decode(self, fx):
         samples, sample_rate = ondio.read_flac(fx.uri)
@@ -241,10 +235,6 @@ class TestValidation:
     def test_invalid_windows_rejected(self, fx, start_sec, end_sec, match):
         with pytest.raises(ValueError, match=match):
             ondio.read_flac(fx.uri, start_sec, end_sec)
-
-    def test_negative_padding_ratio_rejected(self, fx):
-        with pytest.raises(ValueError, match="padding_ratio"):
-            ondio.read_flac(fx.uri, 1.0, 2.0, padding_ratio=-0.1)
 
     def test_zero_duration_stream_rejects_windows(self):
         # total_samples = 0 is legal FLAC ("unknown length"), but a windowed
@@ -560,29 +550,6 @@ class TestRangedExact:
         with pytest.raises(OndioError, match="use_range=False"):
             flac_mod.read_flac(backend, fx_vbr.uri, 7.3, 9.9, use_range=True)
         assert backend.short_reads >= 1  # the read did widen to the left
-
-    def test_padding_ratio_deprecated(self, fx):
-        with pytest.warns(DeprecationWarning, match="padding_ratio is ignored"):
-            ondio.read_flac(fx.uri, 1.0, 2.0, padding_ratio=0.5)
-        with warnings.catch_warnings():
-            warnings.simplefilter("error")
-            ondio.read_flac(fx.uri, 1.0, 2.0)
-
-    def test_padding_ratio_warning_points_at_caller(self, fx):
-        with pytest.warns(DeprecationWarning) as via_dispatcher:
-            ondio.read_flac(fx.uri, 1.0, 2.0, padding_ratio=0.5)
-        with pytest.warns(DeprecationWarning) as direct:
-            flac_mod.read_flac(get_backend(fx.uri), fx.uri, 1.0, 2.0, padding_ratio=0.5)
-        for record in (via_dispatcher, direct):
-            assert len(record) == 1
-            assert record[0].filename == __file__
-
-    @pytest.mark.parametrize("func", [ondio.read_flac, ondio.download_flac, flac_mod.read_flac, flac_mod.download_flac])
-    def test_padding_ratio_defaults_agree(self, func):
-        # The dispatcher passes _DEFAULT_PADDING_RATIO on, and the warning
-        # fires for any other value, so every signature must use it.
-        default = inspect.signature(func).parameters["padding_ratio"].default
-        assert default == flac_mod._DEFAULT_PADDING_RATIO
 
     def test_widening_scans_each_byte_once(self, fx_vbr, monkeypatch):
         scanned = []

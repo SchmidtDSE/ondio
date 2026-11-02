@@ -38,7 +38,6 @@ from __future__ import annotations
 
 import io
 import os
-import warnings
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal, overload
@@ -65,8 +64,6 @@ from ondio.types import FlacHeader, OndioError
 # window. Otherwise the whole file is downloaded and sliced, which is exact.
 _RANGE_MIN_FILE_BYTES = 50 * 1024 * 1024
 _RANGE_MAX_WINDOW_RATIO = 0.33
-
-_DEFAULT_PADDING_RATIO = 0.25
 
 # soundfile reports an unknown-length stream (STREAMINFO total_samples = 0)
 # as a huge frame count.
@@ -194,23 +191,6 @@ def _encode_flac(samples: np.ndarray, sample_rate: int, bits_per_sample: int) ->
     buf = io.BytesIO()
     sf.write(buf, samples, sample_rate, format="FLAC", subtype=subtype)
     return buf.getvalue()
-
-
-def _check_padding_ratio(padding_ratio: float, *, stacklevel: int) -> None:
-    """Reject a negative padding_ratio; warn that any other value is ignored.
-
-    `stacklevel` must point the warning at the caller outside ondio, so that
-    Python's default filters show it. The dispatcher checks the value itself
-    and passes the default on, so the warning appears once.
-    """
-    if padding_ratio < 0:
-        raise ValueError(f"padding_ratio must be >= 0, got {padding_ratio}")
-    if padding_ratio != _DEFAULT_PADDING_RATIO:
-        warnings.warn(
-            "padding_ratio is ignored: ranged reads are sample-exact; it will be removed in 0.4",
-            DeprecationWarning,
-            stacklevel=stacklevel,
-        )
 
 
 @dataclass
@@ -467,7 +447,6 @@ def read_flac(
     end_sec: float | None = None,
     *,
     decode: Literal[True] = True,
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
 ) -> tuple[np.ndarray, int]: ...
 
@@ -480,7 +459,6 @@ def read_flac(
     end_sec: float | None = None,
     *,
     decode: Literal[False],
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
 ) -> bytes: ...
 
@@ -492,7 +470,6 @@ def read_flac(
     end_sec: float | None = None,
     *,
     decode: bool = True,
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
 ) -> tuple[np.ndarray, int] | bytes:
     """Read a FLAC file — whole, or a `[start_sec, end_sec]` window — into memory.
@@ -510,9 +487,6 @@ def read_flac(
             bytes of a standalone FLAC file — the original bytes exactly when
             no window is given (a plain read), a fresh lossless encode of
             the slice otherwise.
-        padding_ratio: Deprecated and ignored: ranged reads are
-            sample-exact. A value other than `0.25` emits a
-            `DeprecationWarning`; the argument will be removed in 0.4.
         use_range: Fetch strategy. `None` (default) picks per the legacy
             heuristic: ranged download for files > 50 MB when the window is
             < 1/3 of the stream, full download otherwise. `True`/`False` forces
@@ -544,7 +518,6 @@ def read_flac(
         truncated region the ranged path raises `OndioError` naming
         `use_range=False`. It never starts a full download.
     """
-    _check_padding_ratio(padding_ratio, stacklevel=3)
     whole = start_sec is None and end_sec is None
     if whole and not decode:
         return backend.read(uri)
@@ -563,7 +536,6 @@ def download_flac(
     start_sec: float | None = None,
     end_sec: float | None = None,
     *,
-    padding_ratio: float = 0.25,
     use_range: bool | None = None,
 ) -> None:
     """Write a `.flac` file containing `[start_sec, end_sec]` of `uri` to `out_path`.
@@ -582,7 +554,6 @@ def download_flac(
         out_path: Local `.flac` destination path; parent directories are created.
         start_sec: Window start in seconds; `None` means from the beginning.
         end_sec: Window end in seconds; `None` means to the end of the stream.
-        padding_ratio: As in [`read_flac`][ondio.flac.read_flac].
         use_range: As in [`read_flac`][ondio.flac.read_flac].
 
     Raises:
@@ -596,7 +567,6 @@ def download_flac(
             - The source is not 8, 16 or 24 bits deep, so the window cannot
               be re-encoded.
     """
-    _check_padding_ratio(padding_ratio, stacklevel=3)
     if start_sec is None and end_sec is None:
         backend.download(uri, out_path)
         return
