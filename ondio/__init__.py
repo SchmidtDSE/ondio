@@ -20,6 +20,7 @@ from ondio.dispatcher import (
     read_json,
     read_range,
     upload,
+    upload_files,
     write,
     write_json,
 )
@@ -65,6 +66,7 @@ __all__ = [
     "read_range",
     "set_printer",
     "upload",
+    "upload_files",
     "write",
     "write_json",
 ]

@@ -309,6 +309,87 @@ def upload(
     printer.message(f"uploaded {source_path} to {uri}")
 
 
+def upload_files(
+    uri_prefix: str,
+    local_dir: str | os.PathLike[str],
+    *,
+    overwrite: bool = True,
+    max_workers: int | None = None,
+    backend: StorageBackend | None = None,
+    **kwargs: Any,
+) -> list[str]:
+    """Upload every file under `local_dir` to `uri_prefix`, keeping relative paths.
+
+    The counterpart of `download_files`. `local_dir/sub/a.bin` goes to
+    `<uri_prefix>/sub/a.bin`; a trailing `/` on `uri_prefix` makes no
+    difference. Every file is uploaded, hidden and marker files included.
+    Empty folders make no objects. A link to a file is uploaded with the
+    content it points to; a link to a folder is not entered.
+
+    Uploads run concurrently, in no fixed order. The first failure cancels
+    uploads not yet started and re-raises; objects that already finished are
+    left in place.
+
+    Args:
+        uri_prefix: Fully-qualified storage URI of the folder to upload into.
+        local_dir: Local folder to upload.
+        overwrite: Replace existing objects. `False` uploads each file only if
+            no object exists at its URI, as `upload(..., overwrite=False)` does.
+        max_workers: Thread-pool size for the concurrent uploads.
+        backend: A backend to use for every file instead of one built per file.
+            All threads share it. S3 clients are safe to share; a
+            `google-cloud-storage` client does not promise it.
+        **kwargs: Forwarded to the backend constructor.
+
+    Returns:
+        The URIs written, sorted by relative path.
+
+    Raises:
+        FileNotFoundError: Before anything is uploaded, if `local_dir` does not
+            exist.
+        NotADirectoryError: Before anything is uploaded, if `local_dir` is not
+            a folder.
+        OSError: Before anything is uploaded, if a folder under `local_dir`
+            cannot be read (for example `PermissionError`).
+        ObjectExistsError: With `overwrite=False`, if an object exists at one
+            of the URIs. That object is not changed.
+    """
+    _refuse_options(backend, kwargs)
+    root = Path(local_dir)
+    if not root.exists():
+        raise FileNotFoundError(f"no such folder to upload: {local_dir}")
+    if not root.is_dir():
+        raise NotADirectoryError(f"not a folder: {local_dir}")
+
+    jobs: list[tuple[str, Path]] = []
+    # os.walk skips a folder it cannot read unless onerror raises: the upload
+    # would then succeed with files missing.
+    def refuse(exc: OSError) -> None:
+        raise exc
+
+    for folder, _, names in os.walk(root, onerror=refuse, followlinks=False):
+        for name in names:
+            path = Path(folder) / name
+            jobs.append((path.relative_to(root).as_posix(), path))
+    jobs.sort()
+    base = uri_prefix.rstrip("/")
+    uris = [f"{base}/{relative}" for relative, _ in jobs]
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = [
+            executor.submit(upload, uri, path, overwrite=overwrite, backend=backend, **kwargs)
+            for uri, (_, path) in zip(uris, jobs)
+        ]
+        try:
+            for future in as_completed(futures):
+                future.result()
+        except BaseException:
+            executor.shutdown(wait=True, cancel_futures=True)
+            raise
+    printer.message(f"uploaded {len(jobs)} files from {os.fspath(local_dir)} to {uri_prefix}")
+    return uris
+
+
 def list_files(
     uri_prefix: str,
     *,

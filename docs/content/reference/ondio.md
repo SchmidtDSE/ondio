@@ -17,6 +17,7 @@ Everything here is importable from `ondio` itself, for example `ondio.read` or
         - download
         - download_files
         - upload
+        - upload_files
         - exists
         - delete
         - list_files

@@ -562,3 +562,16 @@ def test_new_files_get_the_normal_permissions(tmp_path):
     ondio.upload(str(tmp_path / "uploaded.bin"), source, overwrite=False)
     for name in ("created.bin", "uploaded.bin"):
         assert (tmp_path / name).stat().st_mode == reference.stat().st_mode
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX links")
+def test_upload_to_a_link_writes_its_target(tmp_path):
+    target = tmp_path / "real.bin"
+    target.write_bytes(b"first")
+    link = tmp_path / "link.bin"
+    link.symlink_to(target)
+    source = tmp_path / "src.bin"
+    source.write_bytes(b"second")
+    ondio.upload(str(link), source)
+    assert link.is_symlink()
+    assert target.read_bytes() == b"second"

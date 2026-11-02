@@ -68,7 +68,8 @@ fetches and parses one.
 | `write_json(uri, obj)` / `read_json(uri)` | JSON objects, serialized/parsed |
 | `download(uri, out_path)` | Download the object at `uri` to a local file |
 | `download_files(uris, local_dir)` | Download many objects into a directory, named by basename; returns local paths in input order |
-| `upload(uri, source_path)` | Stream a local file to `uri`, replacing any existing object |
+| [`upload(uri, source_path)`](guide/objects.md#files-on-disk) | Stream a local file to `uri`, replacing any existing object unless `overwrite=False` |
+| [`upload_files(uri_prefix, local_dir)`](guide/objects.md#files-on-disk) | Upload every file under a local folder to a prefix, keeping relative paths; returns the URIs sorted |
 | `extract_flac_header(uri)` | Parse FLAC STREAMINFO, fetching only header bytes |
 | `read_flac(uri, start_sec, end_sec, decode=…)` | FLAC (whole or windowed) → PCM array or FLAC bytes |
 | `download_flac(uri, out_path, start_sec, end_sec)` | FLAC (whole or windowed) → local `.flac` file |

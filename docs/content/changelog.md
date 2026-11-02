@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.5.0 - 2026-11-02
+
+Everything here is an addition. Code written for 0.4 needs no change.
+
+**New:**
+
+- **`upload(..., overwrite=False)`** writes a file only if no object exists at the
+  URI, and raises `ObjectExistsError` otherwise. On S3 it is one conditional `PUT`,
+  limited to 5 GiB; a larger file raises `UnsupportedOperationError` before anything
+  is sent. See [Files on disk](guide/objects.md#files-on-disk).
+- **`upload_files(uri_prefix, local_dir)`** uploads every file under a local folder,
+  keeping relative paths, and returns the URIs sorted by relative path. It takes
+  `overwrite=` and `max_workers=`.
+- **`anonymous=True`** for `s3://` and `gs://` reads a public bucket with no
+  credentials, per call or on `AwsBackend` and `GcsBackend`. See
+  [Public buckets](guide/objects.md#public-buckets).
+
+**Other changes:**
+
+- **A local `upload` replaces the file in one step.** A reader never sees a partly
+  written file. A replaced file keeps its permissions, and a link at the target is
+  followed, as before: the file it points to is replaced.
+- **Files from a local `create` get the normal permissions**, as `write` gives
+  them, rather than being readable only by their owner.
+- **`StorageBackend.upload` has an `overwrite` keyword.** `ondio` passes it only
+  when it is `False`, so a backend of your own needs it only to support
+  `overwrite=False`.
+
 ## 0.4.0 - 2026-11-02
 
 This release changes error types and HTTP behavior. Code that catches `OndioError`

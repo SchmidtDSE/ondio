@@ -122,7 +122,10 @@ class LocalBackend:
             self._place_new(path, uri, copy)
             return
         # The copy goes to a temporary file that replaces the target in one step,
-        # so a reader never sees a partly written file.
+        # so a reader never sees a partly written file. A link is followed, as
+        # copying onto it would: its target is replaced, not the link.
+        if path.is_symlink():
+            path = Path(os.path.realpath(path))
         try:
             with _replace_on_success(path) as temporary:
                 shutil.copyfile(source_path, temporary)
