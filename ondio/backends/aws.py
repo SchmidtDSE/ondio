@@ -118,6 +118,9 @@ class AwsBackend:
         except ParamValidationError as exc:
             # botocore checked the arguments before sending: a bad request, not a failed fetch.
             raise ValueError(f"invalid S3 request for {uri}") from exc
+        except ValueError:
+            # Some BotoCoreErrors, such as InvalidRegionError, are also ValueErrors.
+            raise
         except BotoCoreError as exc:
             raise _from_botocore_error(exc, uri) from exc
         except RetriesExceededError as exc:

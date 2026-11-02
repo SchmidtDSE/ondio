@@ -353,6 +353,12 @@ class TestErrorTranslation:
         with pytest.raises(TypeError):
             AwsBackend(bogus_option=1)
 
+    def test_bad_region_stays_a_value_error(self):
+        # botocore's InvalidRegionError is both a BotoCoreError and a ValueError.
+        with pytest.raises(ValueError) as info:
+            AwsBackend(region_name="bad region!")
+        assert not isinstance(info.value, ondio.OndioError)
+
     @pytest.mark.parametrize("method", ["get_object", "head_object", "put_object"])
     def test_missing_credentials_are_an_auth_error(self, prefix, monkeypatch, method):
         backend = get_backend(f"{prefix}/k")
