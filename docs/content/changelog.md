@@ -2,7 +2,8 @@
 
 ## 0.5.0 - 2026-11-02
 
-Everything here is an addition. Code written for 0.4 needs no change.
+This release adds features and changes two local-disk behaviors, listed under
+*Other changes*. Code that does not depend on those needs no change.
 
 **New:**
 
@@ -21,7 +22,9 @@ Everything here is an addition. Code written for 0.4 needs no change.
 
 - **A local `upload` replaces the file in one step.** A reader never sees a partly
   written file. A replaced file keeps its permissions, and a link at the target is
-  followed, as before: the file it points to is replaced.
+  followed, as before: the file it points to is replaced. Because the file is
+  replaced, not written into, a hard link to the old file keeps the old content,
+  the owner and extended attributes are not kept, and the folder must be writable.
 - **Files from a local `create` get the normal permissions**, as `write` gives
   them, rather than being readable only by their owner.
 - **`StorageBackend.upload` has an `overwrite` keyword.** `ondio` passes it only

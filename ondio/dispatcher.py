@@ -272,8 +272,8 @@ def upload(
 
     The file is sent without being read into memory. An existing object at
     `uri` is replaced, unless `overwrite=False`: the file is then written only
-    if no object exists there, in one request, and a reader sees either no
-    object or the complete one. Supported on S3, GCS, and local disk. On S3 it
+    if no object exists there, and a reader sees either no object or the
+    complete one. Supported on S3, GCS, and local disk. On S3 it
     is a single PUT, so the file can be at most 5 GiB.
 
     Args:
@@ -322,9 +322,9 @@ def upload_files(
 
     The counterpart of `download_files`. `local_dir/sub/a.bin` goes to
     `<uri_prefix>/sub/a.bin`; a trailing `/` on `uri_prefix` makes no
-    difference. Every file is uploaded, hidden and marker files included.
-    Empty folders make no objects. A link to a file is uploaded with the
-    content it points to; a link to a folder is not entered.
+    difference. Every file is uploaded, hidden files included. Empty folders
+    make no objects. A link to a file is uploaded with the content it points
+    to; a link to a folder is not entered.
 
     Uploads run concurrently, in no fixed order. The first failure cancels
     uploads not yet started and re-raises; objects that already finished are
@@ -349,6 +349,9 @@ def upload_files(
             exist.
         NotADirectoryError: Before anything is uploaded, if `local_dir` is not
             a folder.
+        FileNotFoundError: Before anything is uploaded, if an entry under
+            `local_dir` is not a file or a link to one (for example a broken
+            link).
         OSError: Before anything is uploaded, if a folder under `local_dir`
             cannot be read (for example `PermissionError`).
         ObjectExistsError: With `overwrite=False`, if an object exists at one
@@ -370,9 +373,11 @@ def upload_files(
     for folder, _, names in os.walk(root, onerror=refuse, followlinks=False):
         for name in names:
             path = Path(folder) / name
+            if not path.is_file():
+                raise FileNotFoundError(f"not a file to upload: {path}")
             jobs.append((path.relative_to(root).as_posix(), path))
     jobs.sort()
-    base = uri_prefix.rstrip("/")
+    base = uri_prefix.removesuffix("/")
     uris = [f"{base}/{relative}" for relative, _ in jobs]
 
     with ThreadPoolExecutor(max_workers=max_workers) as executor:

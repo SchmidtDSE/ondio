@@ -102,3 +102,19 @@ def test_an_unreadable_folder_raises_before_any_upload(src_dir, tmp_path):
     finally:
         locked.chmod(0o755)
     assert not (tmp_path / "out").exists()
+
+
+def test_a_file_root_prefix_keeps_its_three_slashes(src_dir):
+    class Recorder:
+        def upload(self, uri, source_path):
+            pass
+
+    uris = ondio.upload_files("file:///", src_dir, backend=Recorder())
+    assert uris == [f"file:///{name}" for name in EXPECTED]
+
+
+def test_a_broken_link_raises_before_any_upload(src_dir, tmp_path):
+    (src_dir / "broken").symlink_to(src_dir / "missing")
+    with pytest.raises(FileNotFoundError):
+        ondio.upload_files(str(tmp_path / "out"), src_dir)
+    assert not (tmp_path / "out").exists()

@@ -106,7 +106,9 @@ local = ondio.download_files(uris, "results/", max_workers=8)
 prefix, keeping the relative paths, and returns the URIs sorted by relative path.
 Hidden files are uploaded too, and empty folders make no objects. A link to a file
 is uploaded with the content it points to; a link to a folder is not entered.
-A folder that cannot be read raises `PermissionError` before anything is uploaded.
+A folder that cannot be read raises `PermissionError`, and an entry that is not a
+file, such as a broken link, raises `FileNotFoundError`, both before anything is
+uploaded.
 `overwrite=False` works as it does for `upload`. The first failure stops the call;
 files that already finished stay uploaded.
 
@@ -259,7 +261,8 @@ ondio.read("gs://my-bucket/audio/rec.flac", backend=gcs)
 
 `download_files` and `upload_files` give the one backend to all their threads. S3 clients and
 `HttpBackend` can be shared that way. A `google-cloud-storage` client does not
-promise it; give `download_files` no GCS backend if that matters to you.
+promise it; give `download_files` and `upload_files` no GCS backend if that
+matters to you.
 
 ondio does not check that the backend matches the URI scheme. A wrong backend fails
 at its first call.
