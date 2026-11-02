@@ -13,6 +13,7 @@ from google.api_core import exceptions as gexc  # noqa: E402
 
 from ondio import (  # noqa: E402
     AuthError,
+    NetworkError,
     ObjectExistsError,
     ObjectNotFoundError,
     OndioError,
@@ -289,24 +290,25 @@ class TestCreate:
         assert backend.read(uri) == b"first"
 
     @pytest.mark.parametrize(
-        "failure",
+        "failure, expected",
         [
-            gexc.ServiceUnavailable("unavailable"),
-            gexc.RetryError("deadline exceeded", cause=None),
-            google.auth.exceptions.TransportError("connection reset"),
-            requests.exceptions.ConnectionError("connection reset"),
+            (gexc.ServiceUnavailable("unavailable"), OndioError),
+            (gexc.RetryError("deadline exceeded", cause=None), NetworkError),
+            (google.auth.exceptions.TransportError("connection reset"), NetworkError),
+            (requests.exceptions.ConnectionError("connection reset"), NetworkError),
+            (requests.exceptions.ChunkedEncodingError("broken body"), OndioError),
             # a resumable upload (over 8 MiB) whose checksum does not match
-            google.cloud.storage.exceptions.DataCorruption(None, "checksum mismatch"),
+            (google.cloud.storage.exceptions.DataCorruption(None, "checksum mismatch"), OndioError),
         ],
     )
-    def test_a_failure_is_not_reported_as_existing(self, backend, monkeypatch, failure):
+    def test_a_failure_is_not_reported_as_existing(self, backend, monkeypatch, failure, expected):
         def fail(*args, **kwargs):
             raise failure
 
         monkeypatch.setattr(FakeBlob, "upload_from_string", fail)
         with pytest.raises(OndioError) as raised:
             backend.create(f"{PREFIX}/result.json", b"x")
-        assert type(raised.value) is OndioError
+        assert type(raised.value) is expected
         assert raised.value.__cause__ is failure
 
     def test_expired_credentials_are_an_auth_error(self, backend, monkeypatch):
@@ -347,3 +349,47 @@ def test_endpoint_url_reaches_the_gcs_client_and_keeps_its_credentials(monkeypat
 def test_endpoint_url_with_client_options_is_refused():
     with pytest.raises(ValueError):
         GcsBackend(endpoint_url=ENDPOINT, client_options={"api_endpoint": ENDPOINT})
+
+
+def test_missing_default_credentials_are_an_auth_error(monkeypatch):
+    import google.auth
+
+    def no_credentials(*args, **kwargs):
+        raise google.auth.exceptions.DefaultCredentialsError("none")
+
+    monkeypatch.setattr(google.auth, "default", no_credentials)
+    monkeypatch.delenv("STORAGE_EMULATOR_HOST", raising=False)
+    monkeypatch.delenv("GOOGLE_CLOUD_PROJECT", raising=False)
+    with pytest.raises(AuthError):
+        GcsBackend()
+
+
+class TestTranslation:
+    @pytest.mark.parametrize("failure, expected", [
+        (google.auth.exceptions.RefreshError("expired"), AuthError),
+        (google.auth.exceptions.DefaultCredentialsError("none"), AuthError),
+        (google.auth.exceptions.TransportError("down"), NetworkError),
+        (requests.ConnectionError("refused"), NetworkError),
+        (requests.Timeout("slow"), NetworkError),
+        (gexc.RetryError("gave up", cause=None), NetworkError),
+        (google.cloud.storage.exceptions.InvalidResponse(None, "bad"), OndioError),
+        (requests.exceptions.ChunkedEncodingError("broken body"), OndioError),
+    ])
+    @pytest.mark.parametrize("call", ["read_range", "size", "exists"])
+    def test_read_paths(self, backend, monkeypatch, failure, expected, call):
+        def fail(*args, **kwargs):
+            raise failure
+
+        uri = f"{PREFIX}/audio/chunk_001.flac"
+        target, run = {
+            "read_range": ((FakeBlob, "download_as_bytes"), lambda: backend.read_range(uri, 0, 1)),
+            "size": ((FakeBucket, "get_blob"), lambda: backend.size(uri)),
+            "exists": ((FakeBlob, "exists"), lambda: backend.exists(uri)),
+        }[call]
+        monkeypatch.setattr(*target, fail)
+        with pytest.raises(expected) as raised:
+            run()
+        assert raised.value.__cause__ is failure
+
+    def test_range_past_eof_still_returns_empty(self, backend):
+        assert backend.read_range(f"{PREFIX}/audio/chunk_001.flac", 50, 60) == b""

@@ -8,7 +8,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 from ondio.backends.protocol import _exact_object_matches, _folder_match, _matches_filters
-from ondio.types import AuthError, ObjectExistsError, ObjectNotFoundError, OndioError
+from ondio.types import AuthError, NetworkError, ObjectExistsError, ObjectNotFoundError, OndioError
 
 
 def _split(uri: str) -> tuple[str, str]:
@@ -21,13 +21,23 @@ def _split(uri: str) -> tuple[str, str]:
     return parsed.netloc, parsed.path.lstrip("/")
 
 
+def _transport_errors() -> tuple[type[Exception], ...]:
+    """The SDK errors that mean no answer came from GCS."""
+    import requests
+    from google.api_core import exceptions as gexc
+    from google.auth.exceptions import TransportError as GoogleTransportError
+
+    return (GoogleTransportError, requests.ConnectionError, requests.Timeout, gexc.RetryError)
+
+
 class GcsBackend:
     """`StorageBackend` for Google Cloud Storage (`gs://bucket/key` URIs).
 
     See [`StorageBackend`][ondio.backends.StorageBackend] for method
     semantics. Requires the `gcs` extra. Credentials resolve through the
     `google-cloud-storage` client's native chain; API errors are translated
-    into `ondio`'s exception types.
+    into `ondio`'s exception types: credential errors are `AuthError`, and
+    connection failures and timeouts are `NetworkError`.
 
     Args:
         endpoint_url: The GCS API endpoint. The client still uses its normal
@@ -51,11 +61,15 @@ class GcsBackend:
             if "client_options" in client_kwargs:
                 raise ValueError("give endpoint_url or client_options, not both")
             client_kwargs["client_options"] = {"api_endpoint": endpoint_url}
-        self._client = storage.Client(**client_kwargs)
+        with self._translate("GCS client setup"):
+            self._client = storage.Client(**client_kwargs)
 
     @contextlib.contextmanager
     def _translate(self, uri: str):
+        import requests
         from google.api_core import exceptions as gexc
+        from google.auth.exceptions import DefaultCredentialsError, RefreshError
+        from google.cloud.storage.exceptions import DataCorruption, InvalidResponse
 
         try:
             yield
@@ -64,6 +78,13 @@ class GcsBackend:
         except (gexc.Forbidden, gexc.Unauthorized) as exc:
             raise AuthError(f"access denied: {uri}") from exc
         except gexc.GoogleAPICallError as exc:
+            raise OndioError(f"GCS error for {uri}: {exc}") from exc
+        except (DefaultCredentialsError, RefreshError) as exc:
+            raise AuthError(f"GCS credentials failed for {uri}: {exc}") from exc
+        except _transport_errors() as exc:
+            # Includes RetryError: a GoogleAPIError that the GoogleAPICallError clause misses.
+            raise NetworkError(f"GCS request failed for {uri}: {exc}") from exc
+        except (InvalidResponse, DataCorruption, requests.RequestException) as exc:
             raise OndioError(f"GCS error for {uri}: {exc}") from exc
 
     def _blob(self, uri: str):
@@ -106,7 +127,7 @@ class GcsBackend:
         # A conditional upload: GCS refuses it with 412 if the object exists.
         import requests
         from google.api_core import exceptions as gexc
-        from google.auth.exceptions import RefreshError, TransportError
+        from google.auth.exceptions import RefreshError
         from google.cloud.storage.exceptions import DataCorruption
 
         with self._translate(uri):
@@ -120,8 +141,10 @@ class GcsBackend:
                 raise ObjectExistsError(f"object already exists: {uri}") from exc
             except RefreshError as exc:
                 raise AuthError(f"could not refresh GCS credentials: {uri}") from exc
-            except (TransportError, requests.exceptions.RequestException, gexc.RetryError) as exc:
+            except _transport_errors() as exc:
                 # The request may have reached GCS even though no response arrived.
+                raise NetworkError(f"could not confirm create for {uri}: {exc}") from exc
+            except requests.exceptions.RequestException as exc:
                 raise OndioError(f"could not confirm create for {uri}: {exc}") from exc
             except DataCorruption as exc:
                 # The client tries to delete the object before it raises this.
