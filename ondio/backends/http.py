@@ -35,22 +35,54 @@ class HttpBackend:
     `requests` errors are translated: a bad URL is `ValueError`, a connection
     failure or timeout is `NetworkError`, and any other is `OndioError`.
 
+    For a bearer token, give `headers={"Authorization": "Bearer <token>"}`.
+    `requests` drops `Authorization` when it follows a redirect to another host.
+    No error message holds an option's value.
+
     Args:
+        headers: Headers sent with every request. A `Range` header is refused:
+            `read` would send it and get part of the file.
+        auth: Anything `requests` takes as `auth`, e.g. a `(user, password)` pair.
+        cookies: Cookies sent with every request.
+        verify: `True` checks the server's TLS certificate, `False` does not,
+            and a path names the CA bundle to check it with.
         timeout: Seconds to wait, as `requests` takes it: one number, or a
             `(connect, read)` pair. The read timeout limits each wait for data,
             not the whole request, so a server that keeps sending slowly is not
             stopped by it. `None` waits with no limit.
+        allow_redirects: Follow redirects. If `False`, a 3xx answer is an
+            `OndioError`.
+
+    Raises:
+        ValueError: If `headers` has a `Range` key, in any case.
     """
 
-    def __init__(self, *, timeout: float | tuple[float, float] | None = (10, 60)):
+    def __init__(
+        self,
+        *,
+        headers: dict[str, str] | None = None,
+        auth=None,
+        cookies: dict[str, str] | None = None,
+        verify: bool | str = True,
+        timeout: float | tuple[float, float] | None = (10, 60),
+        allow_redirects: bool = True,
+    ):
         try:
             import requests
         except ImportError as exc:
             raise ImportError(
                 "http(s):// support requires the 'http' extra: pip install ondio[http]"
             ) from exc
+        if any(name.lower() == "range" for name in headers or {}):
+            raise ValueError("headers must not hold a Range header; use read_range")
         self._requests = requests
+        # Copies, so a later change to the caller's dicts does nothing.
+        self._headers = dict(headers or {})
+        self._cookies = dict(cookies or {})
+        self._auth = auth
+        self._verify = verify
         self._timeout = timeout
+        self._allow_redirects = allow_redirects
         self._local = threading.local()  # requests.Session is not thread-safe
 
     @property
@@ -58,6 +90,10 @@ class HttpBackend:
         session = getattr(self._local, "session", None)
         if session is None:
             session = self._local.session = self._requests.Session()
+            session.headers.update(self._headers)
+            session.cookies.update(self._cookies)
+            session.auth = self._auth
+            session.verify = self._verify
         return session
 
     @contextlib.contextmanager
@@ -73,10 +109,14 @@ class HttpBackend:
             raise OndioError(f"HTTP request failed for {uri}: {type(exc).__name__}") from exc
 
     def _get(self, uri: str, **kwargs):
-        return self._session.get(uri, timeout=self._timeout, **kwargs)
+        return self._session.get(
+            uri, timeout=self._timeout, allow_redirects=self._allow_redirects, **kwargs
+        )
 
     def _head(self, uri: str):
-        return self._session.head(uri, timeout=self._timeout, allow_redirects=True)
+        return self._session.head(
+            uri, timeout=self._timeout, allow_redirects=self._allow_redirects
+        )
 
     def _check_status(self, uri: str, response) -> None:
         if response.status_code == 404:
@@ -85,6 +125,9 @@ class HttpBackend:
             raise AuthError(f"access denied ({response.status_code}): {uri}")
         if response.status_code >= 400:
             raise OndioError(f"HTTP {response.status_code} for {uri}")
+        if response.status_code >= 300:
+            # Without this, read would return the redirect page as the file.
+            raise OndioError(f"HTTP {response.status_code} for {uri}: redirect not followed")
 
     def read(self, uri: str) -> bytes:
         with self._translate(uri):

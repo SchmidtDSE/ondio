@@ -1,6 +1,7 @@
 """HTTP backend tests via requests-mock, including the Range contract."""
 
 import io
+import threading
 
 import numpy as np
 import pytest
@@ -217,3 +218,88 @@ class TestTimeout:
         requests_mock.get(URL, content=CONTENT)
         HttpBackend(timeout=None).read(URL)
         assert requests_mock.last_request.timeout is None
+
+
+TOKEN = "secret-token-value"
+
+
+class TestOptions:
+    def test_headers_reach_every_request(self, requests_mock, tmp_path):
+        serve_with_ranges(requests_mock, URL, CONTENT)
+        requests_mock.head(URL, headers={"Content-Length": "10"})
+        backend = HttpBackend(headers={"Authorization": f"Bearer {TOKEN}"})
+        backend.read(URL)
+        backend.size(URL)
+        backend.exists(URL)
+        backend.download(URL, tmp_path / "a.bin")
+        assert backend.read_range(URL, 2, 4) == b"234"
+        for request in requests_mock.request_history:
+            assert request.headers["Authorization"] == f"Bearer {TOKEN}"
+        assert requests_mock.last_request.headers["Range"] == "bytes=2-4"
+
+    @pytest.mark.parametrize("name", ["Range", "range", "RANGE"])
+    def test_a_range_header_is_refused(self, name):
+        with pytest.raises(ValueError) as raised:
+            HttpBackend(headers={name: "bytes=0-1"})
+        assert "bytes=0-1" not in str(raised.value)
+
+    def test_headers_and_cookies_are_copied(self, requests_mock):
+        requests_mock.get(URL, content=CONTENT)
+        headers, cookies = {"X-A": "1"}, {"c": "1"}
+        backend = HttpBackend(headers=headers, cookies=cookies)
+        headers["X-A"] = "2"
+        cookies["c"] = "2"
+        backend.read(URL)
+        assert requests_mock.last_request.headers["X-A"] == "1"
+        assert requests_mock.last_request.headers["Cookie"] == "c=1"
+
+    def test_cookies_auth_verify(self, requests_mock):
+        requests_mock.get(URL, content=CONTENT)
+        HttpBackend(cookies={"c": "v"}, auth=("u", "p"), verify="/ca.pem").read(URL)
+        request = requests_mock.last_request
+        assert "c=v" in request.headers["Cookie"]
+        assert request.headers["Authorization"].startswith("Basic ")
+        assert request.verify == "/ca.pem"
+
+    def test_options_through_get_backend(self, requests_mock):
+        requests_mock.get(URL, content=CONTENT)
+        ondio.read(URL, headers={"X-A": "1"}, verify=False)
+        assert requests_mock.last_request.headers["X-A"] == "1"
+        assert requests_mock.last_request.verify is False
+
+    def test_another_thread_gets_the_same_options(self, requests_mock):
+        requests_mock.get(URL, content=CONTENT)
+        backend = HttpBackend(headers={"X-A": "1"}, verify=False)
+        backend.read(URL)  # builds this thread's session first
+        thread = threading.Thread(target=backend.read, args=(URL,))
+        thread.start()
+        thread.join()
+        assert requests_mock.call_count == 2
+        assert requests_mock.last_request.headers["X-A"] == "1"
+        assert requests_mock.last_request.verify is False
+
+    def test_redirects_are_followed_by_default(self, requests_mock):
+        requests_mock.get(URL, status_code=302, headers={"Location": "http://other/a.bin"})
+        requests_mock.get("http://other/a.bin", content=CONTENT)
+        assert HttpBackend().read(URL) == CONTENT
+
+    def test_redirect_not_followed_is_an_error(self, requests_mock):
+        requests_mock.get(URL, status_code=302, headers={"Location": "http://other/"},
+                          content=b"<html>moved</html>")
+        requests_mock.head(URL, status_code=302, headers={"Location": "http://other/"})
+        target = requests_mock.get("http://other/", content=CONTENT)
+        backend = HttpBackend(allow_redirects=False)
+        with pytest.raises(ondio.OndioError, match="302"):
+            backend.read(URL)
+        with pytest.raises(ondio.OndioError, match="302"):
+            backend.size(URL)
+        assert target.call_count == 0
+
+    def test_no_message_holds_a_header_value(self, requests_mock):
+        requests_mock.get(URL, status_code=500)
+        requests_mock.head(URL, exc=requests.exceptions.ConnectionError(f"Bearer {TOKEN}"))
+        backend = HttpBackend(headers={"Authorization": f"Bearer {TOKEN}"})
+        for call in (lambda: backend.read(URL), lambda: backend.size(URL)):
+            with pytest.raises(ondio.OndioError) as raised:
+                call()
+            assert TOKEN not in str(raised.value)
