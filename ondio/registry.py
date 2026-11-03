@@ -110,7 +110,26 @@ def get_environment(uri: str, **kwargs) -> dict[str, str]:
 
 
 def get_backend(uri: str, **kwargs) -> StorageBackend:
-    """Resolve the backend for a given URI. kwargs are forwarded to the backend constructor."""
+    """The backend for the platform of `uri`, built with `kwargs`.
+
+    Give the result as `backend=` to any public function, to reuse one client and its
+    connections for many calls. The URI only chooses the platform: the backend is not
+    bound to its bucket or path, and serves any URI on the same platform. A URI from
+    another platform given with it raises `ValueError`.
+
+    `kwargs` are the backend constructor's options, the same options that any public
+    function takes.
+
+    Raises:
+        UnknownPlatformError: For an unknown scheme.
+        ImportError: When the extra for the platform is not installed.
+        TypeError: For an option the backend does not take.
+        ValueError: For an option value the backend refuses, or options it refuses
+            together, such as `client` with another option.
+        AuthError: When the backend cannot get credentials, such as for a
+            `profile_name` that does not exist.
+        OndioError: For another failure of the SDK while it makes the client.
+    """
     platform = detect_platform(uri)
     printer.message(f"using {platform} backend for {uri}")
     module_name, class_name = _BACKEND_FACTORIES[platform]

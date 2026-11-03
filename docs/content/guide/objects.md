@@ -239,16 +239,20 @@ its connections for many calls, build the backend once and pass it as `backend=`
 Every public function takes it. With `backend=`, other options raise `ValueError`:
 give them to the backend instead.
 
-```python
-from ondio.backends import AwsBackend
+`get_backend` builds the backend for a URI's platform with the options that any
+call takes, so you do not need to name its class. The URI only chooses the platform:
+the backend serves any URI on that platform, and a URI from another platform raises
+`ValueError`.
 
-s3 = AwsBackend(region_name="us-east-1")
+```python
+s3 = ondio.get_backend("s3://my-bucket", region_name="us-east-1")
 header = ondio.extract_flac_header("s3://my-bucket/audio/rec.flac", backend=s3)
 samples, rate = ondio.read_flac("s3://my-bucket/audio/rec.flac", 10.0, 15.0, backend=s3)
 ```
 
-`AwsBackend(client=...)` and `GcsBackend(client=...)` use a client that you made.
-No other option can be given with `client`.
+The backend classes are in `ondio.backends`. `AwsBackend(client=...)` and
+`GcsBackend(client=...)` use a client that you made. No other option can be given
+with `client`.
 
 <!-- docs-test: skip (needs GCS credentials) -->
 ```python

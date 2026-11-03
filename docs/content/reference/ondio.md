@@ -24,6 +24,7 @@ Everything here is importable from `ondio` itself, for example `ondio.read` or
         - object_count
         - locate
         - detect_platform
+        - get_backend
         - get_environment
         - extract_flac_header
         - read_flac
