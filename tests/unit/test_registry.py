@@ -26,8 +26,8 @@ def test_detect_platform(uri, platform):
 
 
 def test_unknown_scheme_raises():
-    with pytest.raises(UnknownPlatformError, match="ftp"):
-        detect_platform("ftp://host/file")
+    with pytest.raises(UnknownPlatformError, match="example"):
+        detect_platform("example://host/file")
 
 
 def test_public_create_reaches_the_gcs_backend(monkeypatch):
@@ -99,7 +99,7 @@ def test_forms_of_one_local_folder_locate_the_same_place(uri):
         ("s3:///key", ValueError),
         ("gs:///key", ValueError),
         ("https://example.com/a.bin", UnsupportedOperationError),
-        ("ftp://host/a.bin", UnknownPlatformError),
+        ("example://host/a.bin", UnknownPlatformError),
     ],
 )
 def test_locate_refuses_a_location_with_no_fixed_place(uri, error):
@@ -169,4 +169,15 @@ def test_an_option_with_no_variable_is_refused_without_its_value(uri, options):
 
 def test_get_environment_refuses_an_unknown_scheme():
     with pytest.raises(UnknownPlatformError):
-        get_environment("ftp://host/key")
+        get_environment("example://host/key")
+
+
+def test_a_backend_from_get_backend_serves_calls_on_its_platform(tmp_path):
+    backend = ondio.get_backend(str(tmp_path))
+    ondio.create(str(tmp_path / "a.txt"), b"one", backend=backend)
+    assert ondio.read(str(tmp_path / "a.txt"), backend=backend) == b"one"
+
+
+def test_get_backend_refuses_an_unknown_scheme():
+    with pytest.raises(UnknownPlatformError):
+        ondio.get_backend("example://host/key")
