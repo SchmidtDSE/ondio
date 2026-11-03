@@ -17,6 +17,12 @@ def _is_file_uri(uri: str) -> bool:
 
 
 def _to_path(uri: str) -> Path:
+    # The rule of detect_platform: a one-letter scheme is a drive letter (C:/), so a
+    # path. Any other scheme but file: is another platform's URI, and Path() would
+    # read it as a relative path, such as ./s3:/bucket/key.
+    scheme = urlparse(uri).scheme.lower()
+    if len(scheme) > 1 and scheme != "file":
+        raise ValueError(f"not a local path or file:// URI: {uri!r}")
     if not _is_file_uri(uri):
         return Path(uri)
     # The forms below would be read as a different path: urlparse drops a query or

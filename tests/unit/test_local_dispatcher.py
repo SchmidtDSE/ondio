@@ -570,3 +570,23 @@ def test_upload_to_a_link_writes_its_target(tmp_path):
     ondio.upload(str(link), source)
     assert link.is_symlink()
     assert target.read_bytes() == b"second"
+
+
+def test_a_local_backend_refuses_an_s3_uri_and_writes_nothing(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    with pytest.raises(ValueError, match="s3://my-bucket/task.json"):
+        ondio.create("s3://my-bucket/task.json", b"x", backend=LocalBackend())
+    assert list(tmp_path.iterdir()) == []
+
+
+@pytest.mark.parametrize(
+    "call",
+    [
+        lambda b: b.exists("gs://my-bucket/a.txt"),
+        lambda b: b.list_files("gs://my-bucket/"),
+        lambda b: b.read("https://example.com/a.txt"),
+    ],
+)
+def test_a_local_backend_refuses_a_uri_from_another_platform(call):
+    with pytest.raises(ValueError):
+        call(LocalBackend())

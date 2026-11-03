@@ -1,12 +1,20 @@
 # Changelog
 
-## 0.5.1 - unreleased
+## 0.6.0 - unreleased
 
+- **`ondio.get_backend(uri, **options)`** gives the backend for a URI's platform,
+  to reuse with `backend=`. See
+  [Reusing a backend](guide/objects.md#reusing-a-backend).
 - **`anonymous=True` on S3 uses no profile.** Before, a profile that
   `AWS_PROFILE` or `AWS_DEFAULT_PROFILE` named was loaded, and if it did not
   exist, the call raised `AuthError`. Now the variables are not read. The region
   still comes from `region_name` or `AWS_DEFAULT_REGION`, but no longer from the
   region or endpoint settings of that profile.
+- **`LocalBackend` refuses a URI from another platform** with `ValueError`.
+  Before, `s3://`, `gs://` and `http(s)://` URIs were read as relative paths, so a
+  write with a local `backend=` created a folder such as `./s3:/` in the working
+  directory. A relative name with a colon before its first slash, such as
+  `take:1.flac`, is also refused, as the public functions already refused it.
 
 ## 0.5.0 - 2026-11-02
 
