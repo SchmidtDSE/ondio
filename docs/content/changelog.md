@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.6.0 - unreleased
+## 0.6.0 - 2026-11-03
 
 - **`ondio.get_backend(uri, **options)`** gives the backend for a URI's platform,
   to reuse with `backend=`. See
